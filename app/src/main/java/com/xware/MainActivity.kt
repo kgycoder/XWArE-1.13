@@ -62,7 +62,6 @@ class MainActivity : AppCompatActivity() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT)
             WebView.setWebContentsDebuggingEnabled(true)
 
-        // 오버레이 브로드캐스트 수신기 등록
         val filter = IntentFilter("com.xware.OVERLAY_CONTROL")
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU)
             registerReceiver(overlayControlReceiver, filter, RECEIVER_NOT_EXPORTED)
@@ -74,9 +73,6 @@ class MainActivity : AppCompatActivity() {
         setupWebView()
         startMusicService()
         requestNotificationPermission()
-
-        // ★ 배터리 최적화 제외는 앱 완전 로드 후 지연 실행
-        //   onCreate 에서 즉시 startActivity 하면 일부 기기에서 크래시
         webView.postDelayed({ requestBatteryOptimizationExemption() }, 3000)
 
         dlog("앱 시작 → $ASSET_URL")
@@ -182,12 +178,14 @@ class MainActivity : AppCompatActivity() {
         }
 
         webView.webViewClient = object : WebViewClient() {
+
             override fun shouldInterceptRequest(
                 view: WebView?, request: WebResourceRequest?
             ): WebResourceResponse? {
                 val uri = request?.url ?: return null
                 return assetLoader.shouldInterceptRequest(uri)
             }
+
             override fun onPageFinished(view: WebView?, url: String?) {
                 super.onPageFinished(view, url)
                 dlog("로딩완료: $url")
@@ -202,6 +200,25 @@ class MainActivity : AppCompatActivity() {
                     })();
                 """.trimIndent(), null)
             }
+
+            // ★ 핵심: WebView 렌더러 프로세스가 죽었을 때 앱 크래시 방지
+            //   삼성 Android 14에서 YouTube 재생 시 렌더러가 kill 당하는 경우 처리
+            override fun onRenderProcessGone(
+                view: WebView?,
+                detail: RenderProcessGoneDetail?
+            ): Boolean {
+                dlog("WebView 렌더러 종료 — 재시작 시도 (crashed=${detail?.didCrash()})", "W")
+                return try {
+                    // 기존 WebView 제거 후 새로 생성하지 않고 페이지만 리로드
+                    // (true 반환 = 앱은 살아있음)
+                    webView.loadUrl(ASSET_URL)
+                    true
+                } catch (e: Exception) {
+                    dlog("렌더러 복구 실패: $e", "E")
+                    true // 그래도 true 반환해서 앱 종료 방지
+                }
+            }
+
             override fun onReceivedError(
                 view: WebView?, request: WebResourceRequest?, error: WebResourceError?
             ) {
@@ -210,12 +227,14 @@ class MainActivity : AppCompatActivity() {
                     if (url.contains(ASSET_HOST)) dlog("Asset오류: $url", "E")
                 }
             }
+
             override fun onReceivedSslError(
                 view: WebView?, handler: SslErrorHandler?,
                 err: android.net.http.SslError?
             ) {
                 handler?.proceed()
             }
+
             override fun shouldOverrideUrlLoading(
                 view: WebView?, request: WebResourceRequest?
             ): Boolean {
@@ -361,7 +380,6 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    // ★ 배터리 최적화 제외 — 3초 지연 후 실행 (onCreate 즉시 실행 크래시 방지)
     private fun requestBatteryOptimizationExemption() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             try {
