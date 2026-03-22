@@ -26,56 +26,10 @@
   root.style.setProperty('--sat', 'env(safe-area-inset-top,0px)');
   root.style.setProperty('--sab', 'env(safe-area-inset-bottom,0px)');
 
-  /* ════════════════════════════════════════════════
-     ★ 핵심 1: visibilitychange 차단
-     YouTube IFrame은 document.hidden = true 감지 시
-     자동으로 pauseVideo() 를 호출함
-     → 앱을 나가면 즉시 음악이 멈추는 원인
-     이벤트를 완전히 차단하여 YouTube가 백그라운드를 인식 못하게 함
-  ════════════════════════════════════════════════ */
-  Object.defineProperty(document, 'hidden', {
-    get: function () { return false; },
-    configurable: true
-  });
-  Object.defineProperty(document, 'visibilityState', {
-    get: function () { return 'visible'; },
-    configurable: true
-  });
-  Object.defineProperty(document, 'webkitHidden', {
-    get: function () { return false; },
-    configurable: true
-  });
-  Object.defineProperty(document, 'webkitVisibilityState', {
-    get: function () { return 'visible'; },
-    configurable: true
-  });
-
-  // visibilitychange 이벤트 자체를 막음
-  document.addEventListener('visibilitychange', function (e) {
-    e.stopImmediatePropagation();
-  }, true);
-  document.addEventListener('webkitvisibilitychange', function (e) {
-    e.stopImmediatePropagation();
-  }, true);
-
-  /* ════════════════════════════════════════════════
-     ★ 핵심 2: Page Lifecycle API 차단
-     일부 브라우저는 freeze/resume 이벤트로도 재생 제어
-  ════════════════════════════════════════════════ */
-  window.addEventListener('freeze', function (e) {
-    e.stopImmediatePropagation();
-  }, true);
-  window.addEventListener('resume', function (e) {
-    e.stopImmediatePropagation();
-  }, true);
-
   /* ── 터치 위치 추적 ────────────────────────────── */
   document.addEventListener('touchstart', function (e) {
     if (e.touches && e.touches[0])
-      window._lastMouseEvt = {
-        clientX: e.touches[0].clientX,
-        clientY: e.touches[0].clientY
-      };
+      window._lastMouseEvt = { clientX: e.touches[0].clientX, clientY: e.touches[0].clientY };
   }, { passive: true });
 
   /* ── 뒤로가기 ────────────────────────────────────── */
@@ -97,67 +51,90 @@
   /* ════ app.js 로드 후 초기화 ════════════════════ */
   window.addEventListener('load', function () {
 
-    /* ── 비트 이펙트 비활성화 (깜빡임 방지) ────── */
+    /* ── ★ 핵심: Page Visibility API 오버라이드 ──────
+       YouTube IFrame은 document.visibilityState 를 감지해서
+       앱이 백그라운드로 가면 자동으로 영상을 일시정지함.
+       항상 'visible'을 반환하도록 오버라이드해서 방지.
+    ─────────────────────────────────────────────── */
+    try {
+      Object.defineProperty(document, 'hidden', {
+        get: function() { return false; },
+        configurable: true
+      });
+      Object.defineProperty(document, 'visibilityState', {
+        get: function() { return 'visible'; },
+        configurable: true
+      });
+      // visibilitychange 이벤트 발생 자체를 막음
+      var _origAddEventListener = document.addEventListener.bind(document);
+      document.addEventListener = function(type, listener, options) {
+        if (type === 'visibilitychange') {
+          console.log('[Bridge] visibilitychange 이벤트 차단');
+          return;
+        }
+        return _origAddEventListener(type, listener, options);
+      };
+      console.log('[Bridge] Page Visibility API 오버라이드 완료');
+    } catch(e) {
+      console.warn('[Bridge] Visibility 오버라이드 실패: ' + e);
+    }
+
+    /* ── 비트 이펙트 비활성화 ────────────────────── */
     if (typeof BG !== 'undefined') {
       try {
-        Object.defineProperty(BG, 'beat', {
-          get: function () { return 0; },
-          set: function () {}
-        });
+        Object.defineProperty(BG, 'beat', { get: function(){ return 0; }, set: function(){} });
         BG.orbs = []; BG.energyLevel = 0; BG.tEnergyLevel = 0;
-      } catch (e) { try { BG.beat = 0; } catch (_) {} }
+      } catch(e) { try { BG.beat = 0; } catch(_) {} }
     }
-    window.triggerBeat     = function () {};
-    window.startBeatTimer  = function () {};
-    window.stopBeatTimer   = function () {};
-    window.spawnParticles  = function () {};
-    window.renderParticles = function () {};
-    window.updateSpectrum  = function () {};
+    window.triggerBeat    = function(){};
+    window.startBeatTimer = function(){};
+    window.stopBeatTimer  = function(){};
+    window.spawnParticles = function(){};
+    window.renderParticles= function(){};
+    window.updateSpectrum = function(){};
 
-    /* ── 오버레이 모드 Android 전용 처리 ─────── */
+    /* ── 오버레이 모드 ───────────────────────────── */
     var _androidOverlayOn = false;
-    window.toggleOverlay = function () {
+    window.toggleOverlay = function() {
       _androidOverlayOn = !_androidOverlayOn;
-      document.getElementById('bt-overlay-btn')
-        ?.classList.toggle('on', _androidOverlayOn);
-      document.getElementById('np-overlay-btn')
-        ?.classList.toggle('on', _androidOverlayOn);
+      document.getElementById('bt-overlay-btn')?.classList.toggle('on', _androidOverlayOn);
+      document.getElementById('np-overlay-btn')?.classList.toggle('on', _androidOverlayOn);
       try {
         window.chrome.webview.postMessage(JSON.stringify({
           type: 'overlayMode', active: _androidOverlayOn
         }));
-      } catch (e) {}
+      } catch(e) {}
       if (typeof toast === 'function')
         toast(_androidOverlayOn ? '🫧 오버레이 켜짐' : '오버레이 꺼짐');
     };
 
-    /* ── 재생상태 → 버블 동기화 ─────────────── */
+    /* ── 재생 상태 동기화 ────────────────────────── */
     var _origUpdPlay = window.updPlay;
     if (typeof _origUpdPlay === 'function') {
-      window.updPlay = function () {
+      window.updPlay = function() {
         _origUpdPlay.apply(this, arguments);
         try {
           window.chrome.webview.postMessage(JSON.stringify({
             type: 'playState',
             playing: (typeof S !== 'undefined') ? !!S.playing : false
           }));
-        } catch (e) {}
+        } catch(e) {}
       };
     }
 
-    /* ── 트랙 변경 → 버블 패널 동기화 ─────────── */
+    /* ── 트랙 변경 동기화 ────────────────────────── */
     var _origPlayTrack = window.playTrack;
     if (typeof _origPlayTrack === 'function') {
-      window.playTrack = function (t, idx) {
+      window.playTrack = function(t, idx) {
         _origPlayTrack.apply(this, arguments);
         try {
           window.chrome.webview.postMessage(JSON.stringify({
-            type:    'trackChanged',
+            type: 'trackChanged',
             title:   (t && t.title)   ? t.title   : '',
             channel: (t && t.channel) ? t.channel : '',
             thumb:   (t && t.thumb)   ? t.thumb   : ''
           }));
-        } catch (e) {}
+        } catch(e) {}
       };
     }
 
