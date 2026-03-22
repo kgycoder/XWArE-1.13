@@ -10,7 +10,7 @@ android {
     defaultConfig {
         applicationId "com.xware"
         minSdk 23
-        targetSdk 33   // ★ 34 → 33: Android 14 ForegroundService 타입 강제 적용 우회
+        targetSdk 34   // ★ 34 복구 (경고 제거)
         versionCode 2
         versionName "1.1.0"
         resourceConfigurations += ["ko", "en"]
