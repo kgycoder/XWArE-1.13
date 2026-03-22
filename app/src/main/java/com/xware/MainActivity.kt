@@ -62,6 +62,7 @@ class MainActivity : AppCompatActivity() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT)
             WebView.setWebContentsDebuggingEnabled(true)
 
+        // 오버레이 브로드캐스트 수신기 등록
         val filter = IntentFilter("com.xware.OVERLAY_CONTROL")
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU)
             registerReceiver(overlayControlReceiver, filter, RECEIVER_NOT_EXPORTED)
@@ -73,7 +74,10 @@ class MainActivity : AppCompatActivity() {
         setupWebView()
         startMusicService()
         requestNotificationPermission()
-        requestBatteryOptimizationExemption()
+
+        // ★ 배터리 최적화 제외는 앱 완전 로드 후 지연 실행
+        //   onCreate 에서 즉시 startActivity 하면 일부 기기에서 크래시
+        webView.postDelayed({ requestBatteryOptimizationExemption() }, 3000)
 
         dlog("앱 시작 → $ASSET_URL")
         webView.loadUrl(ASSET_URL)
@@ -85,7 +89,6 @@ class MainActivity : AppCompatActivity() {
         webView.resumeTimers()
     }
 
-    // ★ 백그라운드 재생 유지: onPause/onStop 에서 타이머를 멈추지 않음
     override fun onPause() {
         super.onPause()
         webView.resumeTimers()
@@ -152,7 +155,9 @@ class MainActivity : AppCompatActivity() {
                 dlog("[${msg.sourceId()?.substringAfterLast('/') ?: ""}:${msg.lineNumber()}] ${msg.message()}", lv)
                 return true
             }
-            override fun onPermissionRequest(req: PermissionRequest?) { req?.grant(req.resources) }
+            override fun onPermissionRequest(req: PermissionRequest?) {
+                req?.grant(req.resources)
+            }
             override fun onJsAlert(v: WebView?, u: String?, m: String?, r: JsResult?): Boolean {
                 Toast.makeText(this@MainActivity, m, Toast.LENGTH_SHORT).show()
                 r?.confirm(); return true
@@ -162,18 +167,24 @@ class MainActivity : AppCompatActivity() {
             override fun onShowCustomView(view: View?, cb: CustomViewCallback?) {
                 if (customView != null) { cb?.onCustomViewHidden(); return }
                 customView = view; customViewCb = cb
-                (window.decorView as? FrameLayout)?.addView(view, FrameLayout.LayoutParams(-1, -1))
+                (window.decorView as? FrameLayout)
+                    ?.addView(view, FrameLayout.LayoutParams(-1, -1))
                 window.addFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN)
             }
             override fun onHideCustomView() {
-                (window.decorView as? FrameLayout)?.takeIf { customView != null }?.removeView(customView)
-                customView = null; customViewCb?.onCustomViewHidden(); customViewCb = null
+                (window.decorView as? FrameLayout)
+                    ?.takeIf { customView != null }?.removeView(customView)
+                customView = null
+                customViewCb?.onCustomViewHidden()
+                customViewCb = null
                 window.clearFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN)
             }
         }
 
         webView.webViewClient = object : WebViewClient() {
-            override fun shouldInterceptRequest(view: WebView?, request: WebResourceRequest?): WebResourceResponse? {
+            override fun shouldInterceptRequest(
+                view: WebView?, request: WebResourceRequest?
+            ): WebResourceResponse? {
                 val uri = request?.url ?: return null
                 return assetLoader.shouldInterceptRequest(uri)
             }
@@ -182,28 +193,42 @@ class MainActivity : AppCompatActivity() {
                 dlog("로딩완료: $url")
                 view?.evaluateJavascript("""
                     (function(){
-                        window.onerror = function(m,s,l){ console.error('[ERR] '+m+' @'+s+':'+l); return false; };
-                        window.onunhandledrejection = function(e){ console.error('[PROMISE] '+(e.reason||e)); };
+                        window.onerror = function(m,s,l){
+                            console.error('[ERR] '+m+' @'+s+':'+l); return false;
+                        };
+                        window.onunhandledrejection = function(e){
+                            console.error('[PROMISE] '+(e.reason||e));
+                        };
                     })();
                 """.trimIndent(), null)
             }
-            override fun onReceivedError(view: WebView?, request: WebResourceRequest?, error: WebResourceError?) {
+            override fun onReceivedError(
+                view: WebView?, request: WebResourceRequest?, error: WebResourceError?
+            ) {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
                     val url = request?.url?.toString() ?: ""
                     if (url.contains(ASSET_HOST)) dlog("Asset오류: $url", "E")
                 }
             }
-            override fun onReceivedSslError(view: WebView?, handler: SslErrorHandler?, err: android.net.http.SslError?) {
+            override fun onReceivedSslError(
+                view: WebView?, handler: SslErrorHandler?,
+                err: android.net.http.SslError?
+            ) {
                 handler?.proceed()
             }
-            override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
+            override fun shouldOverrideUrlLoading(
+                view: WebView?, request: WebResourceRequest?
+            ): Boolean {
                 val url = request?.url?.toString() ?: return false
-                val keep = listOf(ASSET_HOST, "youtube.com", "googlevideo.com",
+                val keep = listOf(
+                    ASSET_HOST, "youtube.com", "googlevideo.com",
                     "ytimg.com", "lrclib.net", "googleapis.com",
-                    "fonts.google", "suggestqueries", "gstatic.com")
+                    "fonts.google", "suggestqueries", "gstatic.com"
+                )
                 if (keep.any { url.contains(it) }) return false
-                return try { startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url))); true }
-                       catch (_: Exception) { false }
+                return try {
+                    startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url))); true
+                } catch (_: Exception) { false }
             }
         }
 
@@ -221,7 +246,8 @@ class MainActivity : AppCompatActivity() {
         else {
             @Suppress("DEPRECATION")
             window.decorView.systemUiVisibility = (
-                View.SYSTEM_UI_FLAG_LAYOUT_STABLE or View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN)
+                View.SYSTEM_UI_FLAG_LAYOUT_STABLE or
+                View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN)
         }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP)
             window.statusBarColor = Color.TRANSPARENT
@@ -232,12 +258,23 @@ class MainActivity : AppCompatActivity() {
     // ════════════════════════════════════════════
     fun setOverlayMode(active: Boolean) {
         if (active) {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.canDrawOverlays(this)) {
-                Toast.makeText(this, "설정 → 앱 → X-WARE → '다른 앱 위에 표시' 허용 후 다시 시도하세요", Toast.LENGTH_LONG).show()
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M &&
+                !Settings.canDrawOverlays(this)) {
+                Toast.makeText(
+                    this,
+                    "설정 → 앱 → X-WARE → '다른 앱 위에 표시' 허용 후 다시 시도하세요",
+                    Toast.LENGTH_LONG
+                ).show()
                 try {
-                    startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName")))
+                    startActivity(Intent(
+                        Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                        Uri.parse("package:$packageName")
+                    ))
                 } catch (_: Exception) {
-                    startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:$packageName")))
+                    startActivity(Intent(
+                        Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                        Uri.parse("package:$packageName")
+                    ))
                 }
                 return
             }
@@ -253,11 +290,14 @@ class MainActivity : AppCompatActivity() {
         super.onWindowFocusChanged(hasFocus)
         if (hasFocus && _pendingOverlay) {
             _pendingOverlay = false
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && Settings.canDrawOverlays(this)) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M &&
+                Settings.canDrawOverlays(this)) {
                 startLyricsOverlay()
                 webView.evaluateJavascript(
                     "document.getElementById('bt-overlay-btn')?.classList.add('on');" +
-                    "document.getElementById('np-overlay-btn')?.classList.add('on');", null)
+                    "document.getElementById('np-overlay-btn')?.classList.add('on');",
+                    null
+                )
             }
         }
     }
@@ -268,14 +308,22 @@ class MainActivity : AppCompatActivity() {
         else startService(i)
     }
 
-    private fun stopLyricsOverlay() = stopService(Intent(this, LyricsOverlayService::class.java))
+    private fun stopLyricsOverlay() =
+        stopService(Intent(this, LyricsOverlayService::class.java))
 
-    fun syncPlayStateToOverlay(playing: Boolean) = LyricsOverlayService.updatePlayState(this, playing)
-    fun syncTrackToOverlay(title: String, thumb: String) = LyricsOverlayService.updateTrack(this, title, thumb)
-    fun updateOverlayLyrics(prev: String, active: String, next: String) = LyricsOverlayService.updateLyrics(this, prev, active, next)
+    fun syncPlayStateToOverlay(playing: Boolean) =
+        LyricsOverlayService.updatePlayState(this, playing)
+
+    fun syncTrackToOverlay(title: String, thumb: String) =
+        LyricsOverlayService.updateTrack(this, title, thumb)
+
+    fun updateOverlayLyrics(prev: String, active: String, next: String) =
+        LyricsOverlayService.updateLyrics(this, prev, active, next)
 
     fun updateNotificationTitle(title: String) {
-        sendBroadcast(Intent(MusicKeepAliveService.ACTION_UPDATE_TITLE).apply { putExtra("title", title) })
+        sendBroadcast(Intent(MusicKeepAliveService.ACTION_UPDATE_TITLE).apply {
+            putExtra("title", title)
+        })
     }
 
     // ════════════════════════════════════════════
@@ -285,15 +333,20 @@ class MainActivity : AppCompatActivity() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             (getSystemService(NOTIFICATION_SERVICE) as NotificationManager)
                 .createNotificationChannel(NotificationChannel(
-                    "xware_music", "X-WARE 음악", NotificationManager.IMPORTANCE_LOW
-                ).apply { setShowBadge(false); lockscreenVisibility = Notification.VISIBILITY_PUBLIC })
+                    "xware_music", "X-WARE 음악",
+                    NotificationManager.IMPORTANCE_LOW
+                ).apply {
+                    setShowBadge(false)
+                    lockscreenVisibility = Notification.VISIBILITY_PUBLIC
+                })
         }
         val i = Intent(this, MusicKeepAliveService::class.java)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) startForegroundService(i)
         else startService(i)
     }
 
-    private fun stopMusicService() = stopService(Intent(this, MusicKeepAliveService::class.java))
+    private fun stopMusicService() =
+        stopService(Intent(this, MusicKeepAliveService::class.java))
 
     // ════════════════════════════════════════════
     //  권한
@@ -301,11 +354,14 @@ class MainActivity : AppCompatActivity() {
     private fun requestNotificationPermission() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
             checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS)
-            != android.content.pm.PackageManager.PERMISSION_GRANTED)
-            requestPermissions(arrayOf(android.Manifest.permission.POST_NOTIFICATIONS), 1002)
+            != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+            requestPermissions(
+                arrayOf(android.Manifest.permission.POST_NOTIFICATIONS), 1002
+            )
+        }
     }
 
-    // ★ 배터리 최적화 제외 — resolveActivity 확인 후 실행 (크래시 방지)
+    // ★ 배터리 최적화 제외 — 3초 지연 후 실행 (onCreate 즉시 실행 크래시 방지)
     private fun requestBatteryOptimizationExemption() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             try {
@@ -315,14 +371,11 @@ class MainActivity : AppCompatActivity() {
                         Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
                         Uri.parse("package:$packageName")
                     )
-                    // ★ resolveActivity 로 사전 확인 — 미지원 기기 크래시 방지
                     if (intent.resolveActivity(packageManager) != null) {
                         startActivity(intent)
                     }
                 }
-            } catch (_: Exception) {
-                // 어떤 예외도 무시 — 앱 정상 동작 유지
-            }
+            } catch (_: Exception) { }
         }
     }
 
@@ -331,9 +384,11 @@ class MainActivity : AppCompatActivity() {
         @Suppress("DEPRECATION")
         super.onActivityResult(requestCode, resultCode, data)
         if (requestCode == OVERLAY_PERMISSION_REQUEST) {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && Settings.canDrawOverlays(this))
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M &&
+                Settings.canDrawOverlays(this))
                 startLyricsOverlay()
-            else Toast.makeText(this, "권한 거부됨", Toast.LENGTH_SHORT).show()
+            else
+                Toast.makeText(this, "권한 거부됨", Toast.LENGTH_SHORT).show()
         }
     }
 }
