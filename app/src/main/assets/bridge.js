@@ -1,5 +1,5 @@
 /**
- * XWare Android Bridge v3.9
+ * XWare Android Bridge v4.0
  */
 (function () {
   'use strict';
@@ -24,32 +24,7 @@
   (function () {
     var s = document.createElement('style');
     s.textContent = '* { -webkit-tap-highlight-color: transparent !important; outline: none !important; }';
-    var head = document.head || document.documentElement;
-    head.appendChild(s);
-  })();
-
-  /* ════════════════════════════════════════════════
-     ★ localStorage.setItem 조기 후킹
-     앱이 플레이리스트를 저장할 때 키 자동 탐지
-  ════════════════════════════════════════════════ */
-  var _plKey = null;
-  (function () {
-    var _origSetItem = localStorage.setItem.bind(localStorage);
-    localStorage.setItem = function (key, value) {
-      _origSetItem(key, value);
-      if (_plKey) return; // 이미 탐지됨
-      try {
-        var parsed = JSON.parse(value);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          var f = parsed[0];
-          if (f && typeof f === 'object' &&
-              (f.tracks !== undefined || (f.name !== undefined && f.id !== undefined))) {
-            _plKey = key;
-            console.log('[Bridge] 플레이리스트 키 자동 탐지:', key);
-          }
-        }
-      } catch (e) {}
-    };
+    (document.head || document.documentElement).appendChild(s);
   })();
 
   /* ── 터치 위치 추적 ─────────────────────────── */
@@ -120,126 +95,123 @@
     };
 
     /* ════════════════════════════════════════════
-       플레이리스트 Storage 유틸
+       ★ 트랙 정규화
+       앱이 사용하는 정확한 포맷: dur (duration 아님)
     ════════════════════════════════════════════ */
-    function _findStorage() {
-      /* localStorage.setItem 후킹으로 이미 탐지된 경우 */
-      if (_plKey) {
-        try {
-          var v = localStorage.getItem(_plKey);
-          if (v) return { key: _plKey, data: JSON.parse(v) };
-        } catch (e) {}
-      }
-      /* 직접 스캔 */
-      var cands = ['xw_pl','xw_playlists','playlists','PL','pl_data','xware_pl','xware_playlists'];
-      for (var i = 0; i < cands.length; i++) {
-        try {
-          var val = localStorage.getItem(cands[i]);
-          if (!val) continue;
-          var parsed = JSON.parse(val);
-          if (Array.isArray(parsed)) { _plKey = cands[i]; return { key: _plKey, data: parsed }; }
-        } catch (e) {}
-      }
-      for (var j = 0; j < localStorage.length; j++) {
-        var k = localStorage.key(j);
-        try {
-          var raw = JSON.parse(localStorage.getItem(k) || '');
-          if (Array.isArray(raw) && raw.length > 0) {
-            var f = raw[0];
-            if (f && (f.tracks !== undefined || (f.name && f.id))) {
-              _plKey = k; return { key: k, data: raw };
-            }
-          }
-        } catch (e) {}
-      }
-      _plKey = _plKey || 'xw_pl';
-      return { key: _plKey, data: [] };
-    }
-
-    /* ★ 플레이리스트 탭 찾기 */
-    function _findPlNav() {
-      /* data-v 속성 */
-      var el = document.querySelector('[data-v="playlists"], [data-v="pl"]');
-      if (el) return el;
-      /* onclick 속성에 playlists 포함 */
-      var nbs = document.querySelectorAll('.nb');
-      for (var i = 0; i < nbs.length; i++) {
-        var nb = nbs[i];
-        var oc = nb.getAttribute('onclick') || '';
-        var tx = nb.textContent || '';
-        if (oc.indexOf('playlist') !== -1 || oc.indexOf('\'pl\'') !== -1 ||
-            oc.indexOf('"pl"') !== -1 || tx.indexOf('플레이리스트') !== -1) {
-          return nb;
-        }
-      }
-      return null;
-    }
-
-    /* ★ 저장 + 앱 즉시 반영
-       핵심: 플레이리스트 탭을 클릭 → 앱이 localStorage 재로드
-       → 원래 탭으로 복귀 (70ms, 사용자 인식 불가)           */
-    function _savePL(key, data) {
-      var k = key || _plKey || 'xw_pl';
-
-      /* 1. localStorage 저장 (setItem 후킹으로 _plKey 도 자동 갱신됨) */
-      try { localStorage.setItem(k, JSON.stringify(data)); } catch (e) {}
-
-      /* 2. 앱 렌더 함수 직접 호출 시도 */
-      var fns = ['renderPL','plRender','loadPL','refreshPlaylists',
-                 'renderPlaylists','plLoad','initPL','plRefresh','updatePL'];
-      var rendered = false;
-      fns.forEach(function (fn) {
-        if (typeof window[fn] === 'function') {
-          try { window[fn](); rendered = true; } catch (e) {}
-        }
-      });
-
-      /* 3. ★ 렌더 함수 실패 시: 탭 클릭으로 강제 재로드
-            현재 탭 기억 → 플레이리스트 탭 클릭 → 원래 탭 복귀 */
-      if (!rendered) {
-        try {
-          var plNav      = _findPlNav();
-          var currentNav = document.querySelector('.nb.on');
-          if (plNav) {
-            var wasOnPl = (plNav === currentNav);
-            plNav.click();
-            if (!wasOnPl && currentNav && currentNav !== plNav) {
-              setTimeout(function () {
-                try { currentNav.click(); } catch (e) {}
-              }, 70);
-            }
-          }
-        } catch (e) {}
-      }
-    }
-
     function _normTrack(t) {
       return {
-        id:       t.id       || t.videoId   || '',
-        title:    t.title    || '',
-        channel:  t.channel  || t.artist    || '',
-        thumb:    t.thumb    || t.thumbnail || '',
-        duration: t.duration || 0
+        id:      t.id      || t.videoId   || '',
+        title:   t.title   || '',
+        channel: t.channel || t.artist    || '',
+        dur:     t.dur     || t.duration  || 0,   // ★ 'dur' 사용
+        thumb:   t.thumb   || t.thumbnail || ''
       };
     }
 
-    function _addToPL(pl, track, storageKey) {
-      var st     = _findStorage();
-      var target = null;
-      for (var i = 0; i < st.data.length; i++) {
-        if (st.data[i].id === pl.id) { target = st.data[i]; break; }
+    /* ════════════════════════════════════════════
+       ★ 플레이리스트 추가 — 앱 함수 직접 호출
+       plAddTrack(plId, track):
+         - PL.lists 인메모리 업데이트
+         - localStorage 'xw_pl' 저장
+         - 토스트 표시
+         - 플레이리스트 상세 뷰 재렌더
+    ════════════════════════════════════════════ */
+    function _addToPL(pl, track) {
+      var t = _normTrack(track);
+
+      /* ★ 앱 네이티브 함수 직접 호출 — 즉시 반영 보장 */
+      if (typeof plAddTrack === 'function') {
+        var ok = plAddTrack(pl.id, t);
+        /* plAddTrack이 grid를 렌더하지 않으므로 추가로 호출 */
+        if (typeof plRenderGrid === 'function') plRenderGrid();
+        return ok !== false;
       }
-      if (!target) { st.data.push(pl); target = pl; }
-      if (!target.tracks) target.tracks = [];
-      for (var j = 0; j < target.tracks.length; j++) {
-        if (target.tracks[j].id === track.id) {
-          if (typeof toast === 'function') toast('이미 추가된 곡이에요');
-          return false;
+
+      /* ── Fallback: PL 직접 조작 ── */
+      if (typeof PL !== 'undefined' && PL.lists) {
+        var target = null;
+        for (var i = 0; i < PL.lists.length; i++) {
+          if (PL.lists[i].id === pl.id) { target = PL.lists[i]; break; }
         }
+        if (!target) { PL.lists.push(pl); target = pl; }
+        if (!target.tracks) target.tracks = [];
+        for (var j = 0; j < target.tracks.length; j++) {
+          if (target.tracks[j].id === t.id) {
+            if (typeof toast === 'function') toast('이미 추가된 곡이에요');
+            return false;
+          }
+        }
+        target.tracks.push(t);
+        if (typeof plSave       === 'function') plSave();
+        if (typeof plRenderGrid === 'function') plRenderGrid();
+        if (typeof toast        === 'function') toast('✦ "' + pl.name + '"에 추가됨');
+        return true;
       }
-      target.tracks.push(_normTrack(track));
-      _savePL(st.key || storageKey, st.data);
-      return true;
+
+      /* ── 최후 Fallback: localStorage 직접 ── */
+      try {
+        var raw = JSON.parse(localStorage.getItem('xw_pl') || '[]');
+        var tgt = null;
+        for (var k = 0; k < raw.length; k++) {
+          if (raw[k].id === pl.id) { tgt = raw[k]; break; }
+        }
+        if (!tgt) { raw.push(pl); tgt = pl; }
+        if (!tgt.tracks) tgt.tracks = [];
+        tgt.tracks.push(t);
+        localStorage.setItem('xw_pl', JSON.stringify(raw));
+        if (typeof toast === 'function') toast('✦ "' + pl.name + '"에 추가됨');
+        return true;
+      } catch (e) {}
+      return false;
+    }
+
+    /* ★ 새 플레이리스트 생성 + 트랙 추가 */
+    function _createAndAdd(name, track) {
+      var t    = _normTrack(track);
+      var newPl = {
+        id:      'pl_' + Date.now(),
+        name:    name,
+        tracks:  [],
+        created: Date.now()
+      };
+
+      if (typeof PL !== 'undefined' && PL.lists &&
+          typeof plSave === 'function' && typeof plRenderGrid === 'function') {
+        PL.lists.unshift(newPl);
+        plSave();
+        /* plAddTrack으로 트랙 추가 (토스트 + 상세 렌더 포함) */
+        if (typeof plAddTrack === 'function') {
+          plAddTrack(newPl.id, t);
+        } else {
+          newPl.tracks.push(t);
+          plSave();
+        }
+        plRenderGrid();
+        return;
+      }
+
+      /* Fallback: localStorage 직접 */
+      try {
+        var raw = JSON.parse(localStorage.getItem('xw_pl') || '[]');
+        newPl.tracks.push(t);
+        raw.unshift(newPl);
+        localStorage.setItem('xw_pl', JSON.stringify(raw));
+        if (typeof toast === 'function') toast('✦ "' + name + '"에 추가됨');
+      } catch (e) {}
+    }
+
+    /* ════════════════════════════════════════════
+       플레이리스트 목록 가져오기
+    ════════════════════════════════════════════ */
+    function _getPlaylists() {
+      /* 앱 in-memory 배열 우선 */
+      if (typeof PL !== 'undefined' && Array.isArray(PL.lists)) return PL.lists;
+      /* localStorage fallback */
+      try {
+        var raw = localStorage.getItem('xw_pl');
+        if (raw) return JSON.parse(raw);
+      } catch (e) {}
+      return [];
     }
 
     /* ════════════════════════════════════════════
@@ -275,7 +247,7 @@
       titleEl.textContent = title || '이름 입력';
 
       var input = document.createElement('input');
-      input.type = 'text';
+      input.type        = 'text';
       input.placeholder = hint || '플레이리스트 이름';
       input.setAttribute('style', [
         'width:100%','box-sizing:border-box',
@@ -301,7 +273,7 @@
         b.textContent = label;
         b.setAttribute('style', [
           'flex:1','padding:13px 0','border-radius:12px',
-          'background:' + bg, 'color:' + color,
+          'background:' + bg,'color:' + color,
           'font-size:14px','font-weight:600',
           'border:none','-webkit-appearance:none',
           'cursor:pointer','font-family:sans-serif',
@@ -369,8 +341,7 @@
         return;
       }
 
-      var st  = _findStorage();
-      var pls = st.data;
+      var pls = _getPlaylists();
 
       var modal = document.createElement('div');
       modal.id = 'xw-pl-modal';
@@ -442,10 +413,9 @@
         item.addEventListener('touchend',
           function(){ this.style.background=''; }, {passive:true});
         item.addEventListener('click', function () {
-          var ok = _addToPL(pl, track, st.key);
           _closePlModal();
-          if (ok && typeof toast === 'function')
-            toast('✓ ' + (pl.name || '플레이리스트') + '에 추가됨');
+          /* ★ 앱 네이티브 함수 직접 호출 → 즉시 반영 */
+          _addToPL(pl, track);
         });
         sheet.appendChild(item);
       });
@@ -477,16 +447,8 @@
         _closePlModal();
         setTimeout(function () {
           _xwPrompt('새 플레이리스트', '플레이리스트 이름', function (name) {
-            var st2   = _findStorage();
-            var newPl = {
-              id:      'pl_' + Date.now(),
-              name:    name,
-              tracks:  [_normTrack(track)],
-              created: Date.now()
-            };
-            st2.data.push(newPl);
-            _savePL(st2.key, st2.data);
-            if (typeof toast === 'function') toast('✓ ' + name + '에 추가됨');
+            /* ★ 앱 네이티브 함수로 즉시 반영 */
+            _createAndAdd(name, track);
           });
         }, 260);
       });
@@ -541,12 +503,12 @@
     if (document.getElementById('bt-overlay-btn')) {
       injectAddButton();
     } else {
-      var obs = new MutationObserver(function () {
+      var _obs = new MutationObserver(function () {
         if (document.getElementById('bt-overlay-btn')) {
-          injectAddButton(); obs.disconnect();
+          injectAddButton(); _obs.disconnect();
         }
       });
-      obs.observe(document.body || document.documentElement, { childList: true, subtree: true });
+      _obs.observe(document.body || document.documentElement, { childList: true, subtree: true });
     }
 
     /* ── YT pauseVideo 인터셉트 ──────────────────── */
@@ -619,7 +581,7 @@
       };
     }
 
-    console.log('[Bridge] 초기화 완료');
+    console.log('[Bridge] 초기화 완료 v4.0');
   });
 
 })();
