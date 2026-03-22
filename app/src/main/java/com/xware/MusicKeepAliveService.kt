@@ -5,9 +5,11 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
 import androidx.core.app.NotificationCompat
+import androidx.core.app.ServiceCompat
 
 class MusicKeepAliveService : Service() {
 
@@ -33,8 +35,21 @@ class MusicKeepAliveService : Service() {
     override fun onCreate() {
         super.onCreate()
         createNotificationChannel()
-        // ★ foregroundServiceType 없이 호출 — Android 14 크래시 방지
-        startForeground(NOTIF_ID, buildNotification("X-WARE", "음악 재생 중"))
+
+        val notification = buildNotification("X-WARE", "음악 재생 중")
+
+        // ★ Android 14(targetSdk 34): ServiceCompat 으로 타입 지정 필수
+        //   타입 없이 startForeground() 호출 시 MissingForegroundServiceTypeException 크래시
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            ServiceCompat.startForeground(
+                this,
+                NOTIF_ID,
+                notification,
+                ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK
+            )
+        } else {
+            startForeground(NOTIF_ID, notification)
+        }
 
         val filter = IntentFilter(ACTION_UPDATE_TITLE)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
