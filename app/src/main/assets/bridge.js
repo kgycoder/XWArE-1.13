@@ -1,5 +1,6 @@
 /**
- * XWare Android Bridge v3.2
+ * XWare Android Bridge v3.3
+ * 백그라운드 재생: pauseVideo 인터셉트 + visibilityState 오버라이드
  */
 (function () {
   'use strict';
@@ -48,63 +49,52 @@
     return false;
   };
 
-  /* ════ 핵심: Page Visibility 완전 차단 ═══════════
-     YouTube IFrame은 visibilityState를 감지해 백그라운드에서
-     자동으로 영상을 일시정지함.
-     메인 document + 모든 iframe 에 동시에 적용해야 함.
-  ═══════════════════════════════════════════════ */
-  function overrideVisibility(doc) {
-    try {
-      Object.defineProperty(doc, 'hidden', {
-        get: function() { return false; },
-        configurable: true
-      });
-      Object.defineProperty(doc, 'visibilityState', {
-        get: function() { return 'visible'; },
-        configurable: true
-      });
-      // visibilitychange 이벤트 리스너 등록 자체를 막음
-      var _orig = doc.addEventListener.bind(doc);
-      doc.addEventListener = function(type, fn, opts) {
-        if (type === 'visibilitychange') return;
-        return _orig(type, fn, opts);
-      };
-    } catch(e) {}
-  }
-
-  // 메인 document에 즉시 적용
-  overrideVisibility(document);
-
-  // ★ YouTube IFrame이 나중에 추가될 때도 적용
-  // MutationObserver로 iframe 감지 → 로드 후 override 주입
-  var iframeObserver = new MutationObserver(function(mutations) {
-    mutations.forEach(function(m) {
-      m.addedNodes.forEach(function(node) {
-        if (node.tagName === 'IFRAME') {
-          node.addEventListener('load', function() {
-            try {
-              overrideVisibility(node.contentDocument);
-            } catch(e) {}
-          });
-        }
-      });
+  /* ════════════════════════════════════════════════
+     핵심 1: Page Visibility 완전 차단
+     - document.visibilityState 항상 'visible'
+     - visibilitychange 이벤트 리스너 차단
+     - pagehide / freeze 이벤트 차단
+  ════════════════════════════════════════════════ */
+  try {
+    Object.defineProperty(document, 'hidden', {
+      get: function () { return false; },
+      configurable: true
     });
-  });
-  iframeObserver.observe(document.body || document.documentElement,
-    { childList: true, subtree: true });
+    Object.defineProperty(document, 'visibilityState', {
+      get: function () { return 'visible'; },
+      configurable: true
+    });
+  } catch(e) {}
 
-  // ★ pagehide / freeze 이벤트도 차단 (Samsung One UI 추가 절전)
-  window.addEventListener('pagehide', function(e) {
-    e.stopImmediatePropagation();
-  }, true);
-  window.addEventListener('freeze', function(e) {
-    e.stopImmediatePropagation();
-  }, true);
-  document.addEventListener('pause', function(e) {
-    e.stopImmediatePropagation();
-  }, true);
+  /* ★ addEventListener 오버라이드를 즉시 (YouTube API 로드 전에) 실행 */
+  var _origDocAdd = document.addEventListener.bind(document);
+  document.addEventListener = function (type, fn, opts) {
+    if (type === 'visibilitychange') {
+      /* YouTube의 visibilitychange 콜백을 래핑: 항상 'visible'로 속임 */
+      var wrappedFn = function (e) {
+        var fakeEvent = new Event('visibilitychange');
+        Object.defineProperty(fakeEvent, 'target', {
+          get: function () {
+            return Object.assign(Object.create(e.target), {
+              hidden: false,
+              visibilityState: 'visible'
+            });
+          }
+        });
+        /* 콜백 자체는 호출하지 않음 — YouTube가 일시정지하는 것을 방지 */
+      };
+      return _origDocAdd(type, wrappedFn, opts);
+    }
+    return _origDocAdd(type, fn, opts);
+  };
 
-  /* ════ app.js 로드 후 초기화 ════════════════════ */
+  /* pagehide / freeze 차단 */
+  window.addEventListener('pagehide',  function(e){ e.stopImmediatePropagation(); }, true);
+  window.addEventListener('freeze',    function(e){ e.stopImmediatePropagation(); }, true);
+
+  /* ════════════════════════════════════════════════
+     app.js 로드 후 초기화
+  ════════════════════════════════════════════════ */
   window.addEventListener('load', function () {
 
     /* ── 비트 이펙트 비활성화 ────────────────────── */
@@ -116,16 +106,61 @@
         BG.orbs = []; BG.energyLevel = 0; BG.tEnergyLevel = 0;
       } catch(e) { try { BG.beat = 0; } catch(_) {} }
     }
-    window.triggerBeat    = function(){};
-    window.startBeatTimer = function(){};
-    window.stopBeatTimer  = function(){};
-    window.spawnParticles = function(){};
-    window.renderParticles= function(){};
-    window.updateSpectrum = function(){};
+    window.triggerBeat     = function(){};
+    window.startBeatTimer  = function(){};
+    window.stopBeatTimer   = function(){};
+    window.spawnParticles  = function(){};
+    window.renderParticles = function(){};
+    window.updateSpectrum  = function(){};
+
+    /* ════════════════════════════════════════════
+       핵심 2: YT Player의 pauseVideo 인터셉트
+       백그라운드 전환 시 YouTube가 pauseVideo()를
+       직접 호출하는 경우도 차단
+    ════════════════════════════════════════════ */
+    var _xwUserPaused = false; /* 사용자가 직접 일시정지했는지 추적 */
+
+    function installYTPauseHook() {
+      if (!window.S || !S.ytPlayer) return;
+      var player = S.ytPlayer;
+      if (player._xwHooked) return;
+      player._xwHooked = true;
+
+      var _origPause = player.pauseVideo.bind(player);
+      player.pauseVideo = function () {
+        /* 사용자가 직접 누른 경우만 허용 */
+        if (_xwUserPaused) {
+          _xwUserPaused = false;
+          return _origPause();
+        }
+        /* 백그라운드에서 자동 호출된 경우 → 무시 */
+        console.log('[Bridge] pauseVideo 자동 호출 차단 (백그라운드)');
+      };
+
+      /* 사용자 일시정지 버튼 클릭 시 플래그 설정 */
+      var origToggle = window.togglePlay;
+      if (typeof origToggle === 'function') {
+        window.togglePlay = function () {
+          if (typeof S !== 'undefined' && S.playing) {
+            _xwUserPaused = true;
+          }
+          return origToggle.apply(this, arguments);
+        };
+      }
+      console.log('[Bridge] YT pauseVideo 훅 설치 완료');
+    }
+
+    /* ytPlayer가 준비될 때까지 대기 후 훅 설치 */
+    var hookTimer = setInterval(function () {
+      if (window.S && S.ytPlayer && S.ytReady) {
+        installYTPauseHook();
+        clearInterval(hookTimer);
+      }
+    }, 500);
 
     /* ── 오버레이 모드 ───────────────────────────── */
     var _androidOverlayOn = false;
-    window.toggleOverlay = function() {
+    window.toggleOverlay = function () {
       _androidOverlayOn = !_androidOverlayOn;
       document.getElementById('bt-overlay-btn')
         ?.classList.toggle('on', _androidOverlayOn);
@@ -143,7 +178,7 @@
     /* ── 재생 상태 동기화 ────────────────────────── */
     var _origUpdPlay = window.updPlay;
     if (typeof _origUpdPlay === 'function') {
-      window.updPlay = function() {
+      window.updPlay = function () {
         _origUpdPlay.apply(this, arguments);
         try {
           window.chrome.webview.postMessage(JSON.stringify({
@@ -157,7 +192,7 @@
     /* ── 트랙 변경 동기화 ────────────────────────── */
     var _origPlayTrack = window.playTrack;
     if (typeof _origPlayTrack === 'function') {
-      window.playTrack = function(t, idx) {
+      window.playTrack = function (t, idx) {
         _origPlayTrack.apply(this, arguments);
         try {
           window.chrome.webview.postMessage(JSON.stringify({
