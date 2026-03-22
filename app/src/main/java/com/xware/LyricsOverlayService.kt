@@ -78,14 +78,17 @@ class LyricsOverlayService : Service() {
     // ── 생명주기 ───────────────────────────────────
     override fun onBind(intent: Intent?): IBinder? = null
 
-    override fun onCreate() {
-        super.onCreate()
-        createNotifChannel()
-        startForeground(NOTIF_ID, buildNotif())
-        wm = getSystemService(Context.WINDOW_SERVICE) as WindowManager
-        createBubble()
-        Log.i(TAG, "오버레이 버블 생성")
-    }
+override fun onCreate() {
+    super.onCreate()
+    // ★ startForeground() 호출 제거
+    //   Android 14 + targetSdk 34: foregroundServiceType 없이 호출 시 즉시 크래시
+    //   MusicKeepAliveService 가 이미 foreground 로 프로세스를 유지하므로
+    //   LyricsOverlayService 는 일반 서비스로도 충분히 동작함
+    createNotifChannel()
+    wm = getSystemService(Context.WINDOW_SERVICE) as WindowManager
+    createBubble()
+    Log.i(TAG, "오버레이 버블 생성")
+}
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
