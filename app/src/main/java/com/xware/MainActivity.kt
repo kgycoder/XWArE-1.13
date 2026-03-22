@@ -494,20 +494,3 @@ class MainActivity : AppCompatActivity() {
         }
     }
 }
-```
-
----
-
-## 핵심 수정 요약
-```
-기존 문제:
-  앱 백그라운드 →
-  Android 시스템이 WebView.onWindowVisibilityChanged(GONE) 자동 호출 →
-  WebView 렌더러 스로틀링 →
-  YouTube IFrame requestAnimationFrame/타이머 중단 →
-  영상 멈춤
-
-해결:
-  BackgroundWebView.onWindowVisibilityChanged() → 항상 View.VISIBLE 전달
-  BackgroundWebView.onPause() → 완전 차단
-  resumeHandler → 100ms 마다 resumeTimers() 강제 호출
