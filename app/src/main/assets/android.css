@@ -1,5 +1,5 @@
 /*
- * XWare Android CSS v4.4
+ * XWare Android CSS v4.5
  */
 
 /* ════════════════════════════
@@ -10,20 +10,23 @@ html.android {
   --sab:       env(safe-area-inset-bottom, 0px);
   --tab-h:     56px;
   --tab-total: calc(var(--tab-h) + var(--sab));
-  --bh:        96px;
+  /* ★ 108px: 2행 레이아웃 잘림 방지 */
+  --bh:        108px;
 }
 
 /* ════════════════════════════
    2. 폰트
-   ★ 커스텀 폰트 완전 제거
-   ★ 시스템 sans-serif + 굵기 강제
-   → 영어·한국어 동일하게 굵게
+   ★ sans-serif + font-weight: bold(700)
+     Android WebView Roboto 는 900 미지원
+     bold(700) 이 실제 적용되는 최대값
+   ★ -webkit-text-stroke: 영어 포함 모든
+     글자에 강제로 굵기 추가
 ════════════════════════════ */
 html.android,
 html.android * {
-  font-family:            sans-serif !important;
+  font-family:            sans-serif  !important;
   -webkit-font-smoothing: antialiased !important;
-  font-synthesis:         none !important;
+  font-synthesis:         none        !important;
 }
 
 /* ════════════════════════════
@@ -31,8 +34,8 @@ html.android * {
 ════════════════════════════ */
 html.android #bgc { display: none !important; }
 html.android .bg-over {
-  backdrop-filter:         none !important;
-  -webkit-backdrop-filter: none !important;
+  backdrop-filter:         none              !important;
+  -webkit-backdrop-filter: none              !important;
   background:              rgba(5,5,14,0.95) !important;
 }
 html.android body {
@@ -85,7 +88,8 @@ html.android .view > div:first-child {
 }
 
 /* ════════════════════════════
-   7. Bottom Bar (하단 플레이어)
+   7. Bottom Bar
+   ★ 상단 패딩 8px → 잘림 방지
 ════════════════════════════ */
 html.android #bar {
   grid-area:             bar                             !important;
@@ -93,8 +97,9 @@ html.android #bar {
   flex-direction:        column                          !important;
   justify-content:       center                          !important;
   align-items:           stretch                         !important;
-  padding:               5px 12px 5px                   !important;
-  gap:                   4px                             !important;
+  /* ★ 상단 패딩 8px 확보 */
+  padding:               8px 12px 6px                   !important;
+  gap:                   5px                             !important;
   grid-template-columns: none                            !important;
   height:                var(--bh)                       !important;
   width:                 100vw                           !important;
@@ -128,15 +133,13 @@ html.android .bt-m {
   min-width: 0 !important;
 }
 html.android .bt-title {
-  font-size:     12.5px !important;
-  font-weight:   700    !important;
-  white-space:   nowrap !important;
-  overflow:      hidden !important;
+  font-size:     12.5px  !important;
+  font-weight:   bold    !important;
+  white-space:   nowrap  !important;
+  overflow:      hidden  !important;
   text-overflow: ellipsis !important;
 }
-html.android .bt-ch {
-  font-size: 10px !important;
-}
+html.android .bt-ch    { font-size: 10px !important; }
 html.android .bt-fav,
 html.android .bt-overlay-btn,
 html.android #bt-overlay-btn { flex-shrink: 0 !important; }
@@ -158,19 +161,10 @@ html.android .bc-row {
   gap:         20px   !important;
   align-items: center !important;
 }
-html.android .cb {
-  min-width:  36px !important;
-  min-height: 36px !important;
-}
-html.android .cb-play {
-  width:  40px !important;
-  height: 40px !important;
-}
-html.android .pb-row {
-  width: 100% !important;
-  gap:   6px  !important;
-}
-html.android .pb { height: 3px !important; }
+html.android .cb      { min-width: 36px !important; min-height: 36px !important; }
+html.android .cb-play { width: 40px     !important; height: 40px     !important; }
+html.android .pb-row  { width: 100%     !important; gap: 6px         !important; }
+html.android .pb      { height: 3px     !important; }
 
 /* ════════════════════════════
    8. 하단 탭바
@@ -206,13 +200,13 @@ html.android .nav-sec {
   height:          var(--tab-h)     !important;
 }
 html.android #side::after {
-  content:    ''                  ;
-  display:    block                !important;
-  width:      100%                 !important;
-  height:     var(--sab)           !important;
-  min-height: var(--sab)           !important;
-  background: rgba(4,4,12,0.98)    !important;
-  flex-shrink: 0                   !important;
+  content:    ''                 ;
+  display:    block               !important;
+  width:      100%                !important;
+  height:     var(--sab)          !important;
+  min-height: var(--sab)          !important;
+  background: rgba(4,4,12,0.98)   !important;
+  flex-shrink: 0                  !important;
 }
 html.android .nb {
   flex:            1 1 0px      !important;
@@ -224,7 +218,7 @@ html.android .nb {
   max-width:       80px         !important;
   border-radius:   0            !important;
   font-size:       9px          !important;
-  font-weight:     700          !important;
+  font-weight:     bold         !important;
   border:          none         !important;
   background:      transparent  !important;
   height:          var(--tab-h) !important;
@@ -232,18 +226,11 @@ html.android .nb {
   position:        relative     !important;
 }
 html.android .nb::before { display: none !important; }
-html.android .nb.on {
-  color:      var(--acc)   !important;
-  background: transparent  !important;
-}
+html.android .nb.on { color: var(--acc) !important; background: transparent !important; }
 html.android .nb.on::after {
-  content:       '';
-  position:      absolute;
-  top:           0;
-  left:          20%;
-  right:         20%;
-  height:        2px;
-  background:    var(--acc);
+  content: ''; position: absolute;
+  top: 0; left: 20%; right: 20%;
+  height: 2px; background: var(--acc);
   border-radius: 0 0 3px 3px;
 }
 html.android .nb .ni { width: 22px !important; height: 22px !important; }
@@ -276,7 +263,6 @@ html.android .card:hover .c-img { transform: none !important; filter: none !impo
 
 /* ════════════════════════════
    10. PiP (YouTube 플레이어)
-   ★ 원본 크기 유지 필수
 ════════════════════════════ */
 html.android #pip {
   position:       fixed   !important;
@@ -322,21 +308,20 @@ html.android .np-art-area.has-lyrics .np-art-shell {
 }
 
 /* ════════════════════════════
-   12. 가사 — Apple Music 스타일
-   ★ font-family: sans-serif 강제
-   ★ font-weight: 900 모든 줄
+   12. 가사
+   ★ font-weight: bold (700)
+     Android WebView 에서 실제 적용되는 최대값
+   ★ -webkit-text-stroke: 0.4px
+     영어 포함 모든 언어 강제 굵기 추가
 ════════════════════════════ */
 html.android .np-art-area:not(.has-lyrics) .np-lyrics-panel {
   display: none !important;
 }
 html.android .np-lyrics-panel {
-  flex:           1        !important;
-  min-height:     0        !important;
-  width:          100%     !important;
-  max-width:      100%     !important;
-  position:       relative !important;
-  display:        flex     !important;
-  flex-direction: column   !important;
+  flex: 1 !important; min-height: 0 !important;
+  width: 100% !important; max-width: 100% !important;
+  position: relative !important;
+  display: flex !important; flex-direction: column !important;
 }
 html.android .np-lyrics-scroll {
   flex:               1             !important;
@@ -356,73 +341,67 @@ html.android .np-lyrics-scroll {
 }
 html.android .np-lyrics-scroll::-webkit-scrollbar { display: none !important; }
 html.android .np-lyrics-inner {
-  display:        flex   !important;
-  flex-direction: column !important;
-  align-items:    center !important;
-  gap:            0      !important;
+  display: flex !important; flex-direction: column !important;
+  align-items: center !important; gap: 0 !important;
 }
 
 /* 기본 줄 */
 html.android .np-lyric-line {
-  display:      block                   !important;
-  font-family:  sans-serif              !important;
-  text-align:   center                  !important;
-  width:        100%                    !important;
-  padding:      6px 16px                !important;
-  font-size:    14px                    !important;
-  font-weight:  900                     !important;
-  font-style:   normal                  !important;
-  color:        rgba(255,255,255,0.20)  !important;
-  transform:    none                    !important;
-  cursor:       pointer                 !important;
-  transition:   color .3s ease, font-size .3s ease !important;
-  line-height:  1.5                     !important;
-  word-break:   keep-all               !important;
-  overflow-wrap: break-word            !important;
+  display:              block                  !important;
+  font-family:          sans-serif             !important;
+  text-align:           center                 !important;
+  width:                100%                   !important;
+  padding:              6px 16px               !important;
+  font-size:            14px                   !important;
+  font-weight:          bold                   !important;
+  font-style:           normal                 !important;
+  -webkit-text-stroke:  0.4px currentColor     !important;
+  color:                rgba(255,255,255,0.20) !important;
+  transform:            none                   !important;
+  cursor:               pointer                !important;
+  transition:           color .3s ease, font-size .3s ease !important;
+  line-height:          1.5                    !important;
+  word-break:           keep-all               !important;
+  overflow-wrap:        break-word             !important;
 }
 
 /* 이전 줄 */
 html.android .np-lyric-line.prev {
-  font-family: sans-serif              !important;
-  font-size:   15px                    !important;
-  font-weight: 900                     !important;
-  color:       rgba(255,255,255,0.52)  !important;
+  font-size:            15px                    !important;
+  font-weight:          bold                    !important;
+  -webkit-text-stroke:  0.4px currentColor      !important;
+  color:                rgba(255,255,255,0.52)  !important;
 }
 
-/* 현재 줄 */
+/* 현재 줄 — 가장 굵고 밝게 */
 html.android .np-lyric-line.active {
-  font-family: sans-serif                 !important;
-  font-size:   clamp(20px, 5.2vw, 25px)  !important;
-  font-weight: 900                        !important;
-  color:       rgba(255,255,255,0.97)     !important;
+  font-size:            clamp(20px, 5.2vw, 25px) !important;
+  font-weight:          bold                      !important;
+  -webkit-text-stroke:  0.6px currentColor        !important;
+  color:                rgba(255,255,255,0.97)    !important;
   text-shadow:
     0 0 20px rgba(255,255,255,0.22),
-    0 2px 10px rgba(0,0,0,0.65)           !important;
+    0 2px 10px rgba(0,0,0,0.65)                  !important;
 }
 
 /* 다음 줄들 */
 html.android .np-lyric-line.near {
-  font-family: sans-serif              !important;
-  font-size:   14px                    !important;
-  font-weight: 900                     !important;
-  color:       rgba(255,255,255,0.36)  !important;
+  font-size:            14px                    !important;
+  font-weight:          bold                    !important;
+  -webkit-text-stroke:  0.4px currentColor      !important;
+  color:                rgba(255,255,255,0.36)  !important;
 }
 
 html.android #np-no-lyrics,
 html.android .np-no-lyrics {
-  font-size:  13px                    !important;
-  text-align: center                  !important;
-  color:      rgba(255,255,255,0.3)   !important;
-  padding:    20px                    !important;
+  font-size: 13px !important; text-align: center !important;
+  color: rgba(255,255,255,0.3) !important; padding: 20px !important;
 }
 html.android .np-lyrics-loading {
-  display:        flex                    !important;
-  flex-direction: column                  !important;
-  align-items:    center                  !important;
-  gap:            8px                     !important;
-  padding:        20px                    !important;
-  font-size:      12px                    !important;
-  color:          rgba(255,255,255,0.4)   !important;
+  display: flex !important; flex-direction: column !important;
+  align-items: center !important; gap: 8px !important;
+  padding: 20px !important; font-size: 12px !important;
+  color: rgba(255,255,255,0.4) !important;
 }
 
 /* ════════════════════════════
@@ -437,7 +416,7 @@ html.android #np-overlay-btn { display: inline-flex !important; }
 html.android #bt-overlay-btn  { display: inline-flex !important; }
 html.android #np-title {
   font-size:   clamp(15px, 4.5vw, 20px) !important;
-  font-weight: 700                       !important;
+  font-weight: bold                      !important;
 }
 html.android #np-ch    { font-size: clamp(11px, 3vw, 14px) !important; }
 html.android .nc       { min-width: 44px !important; min-height: 44px !important; }
@@ -450,11 +429,11 @@ html.android #toast {
   bottom: calc(var(--bh) + var(--tab-total) + 10px) !important;
 }
 html.android #pl-ctx-menu {
-  position:  fixed                                      !important;
-  left:      50%                                        !important;
-  transform: translateX(-50%)                           !important;
-  bottom:    calc(var(--bh) + var(--tab-total) + 12px)  !important;
-  top:       auto                                       !important;
+  position:  fixed                                     !important;
+  left:      50%                                       !important;
+  transform: translateX(-50%)                          !important;
+  bottom:    calc(var(--bh) + var(--tab-total) + 12px) !important;
+  top:       auto                                      !important;
   min-width: 220px;
   max-width: 88vw;
 }
@@ -467,8 +446,8 @@ html.android .fi {
 }
 html.android .sug-item { padding: 12px 14px !important; }
 html.android .lcard    { padding: 11px 10px !important; }
-html.android #v-home       > div:first-child,
-html.android #v-search     > div:first-child,
-html.android #v-fav        > div:first-child,
-html.android #v-queue      > div:first-child,
-html.android #v-playlists  > div:first-child { padding: 12px 14px !important; }
+html.android #v-home      > div:first-child,
+html.android #v-search    > div:first-child,
+html.android #v-fav       > div:first-child,
+html.android #v-queue     > div:first-child,
+html.android #v-playlists > div:first-child { padding: 12px 14px !important; }
