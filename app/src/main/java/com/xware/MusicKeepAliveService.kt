@@ -19,13 +19,11 @@ class MusicKeepAliveService : Service() {
         const val ACTION_UPDATE_TITLE = "com.xware.ACTION_UPDATE_TITLE"
     }
 
-    private var currentTitle = "재생 중..."
-
     private val titleReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
             if (intent?.action == ACTION_UPDATE_TITLE) {
-                currentTitle = intent.getStringExtra("title") ?: "재생 중..."
-                updateNotification(currentTitle)
+                val title = intent.getStringExtra("title") ?: "재생 중..."
+                updateNotification(title)
             }
         }
     }
@@ -38,14 +36,14 @@ class MusicKeepAliveService : Service() {
 
         val notification = buildNotification("X-WARE", "음악 재생 중")
 
-        // ★ Android 14(targetSdk 34): ServiceCompat 으로 타입 지정 필수
-        //   타입 없이 startForeground() 호출 시 MissingForegroundServiceTypeException 크래시
+        // ★ Android 10+: DATA_SYNC 타입으로 startForeground
+        //   mediaPlayback 타입은 삼성 Android 14에서 MediaSession 없으면 크래시
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             ServiceCompat.startForeground(
                 this,
                 NOTIF_ID,
                 notification,
-                ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK
+                ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
             )
         } else {
             startForeground(NOTIF_ID, notification)
