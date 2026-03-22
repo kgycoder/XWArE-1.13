@@ -10,7 +10,7 @@ android {
     defaultConfig {
         applicationId "com.xware"
         minSdk 23
-        targetSdk 34
+        targetSdk 33   // ★ 34 → 33: Android 14 ForegroundService 타입 강제 적용 우회
         versionCode 2
         versionName "1.1.0"
         resourceConfigurations += ["ko", "en"]
@@ -66,15 +66,8 @@ android {
 dependencies {
     implementation 'androidx.appcompat:appcompat:1.7.0'
     implementation 'androidx.core:core-ktx:1.13.1'
-
-    // ★ WebViewAssetLoader — file:// 대신 https:// origin으로 asset 서빙
-    //   YouTube IFrame API가 file:// origin을 차단하는 문제 해결에 필수
     implementation 'androidx.webkit:webkit:1.11.0'
-
-    // 코루틴
     implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3'
     implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-core:1.7.3'
-
-    // Lifecycle
     implementation 'androidx.lifecycle:lifecycle-process:2.7.0'
 }
