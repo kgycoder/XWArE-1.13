@@ -17,6 +17,35 @@ import androidx.webkit.WebViewAssetLoader
 import kotlinx.coroutines.*
 import java.lang.ref.WeakReference
 
+/**
+ * ★ 백그라운드 재생 핵심:
+ *   Android 시스템이 앱을 백그라운드로 보낼 때
+ *   WebView.onWindowVisibilityChanged(GONE) 을 자동 호출 → 렌더러 스로틀링
+ *   → YouTube IFrame 타이머/애니메이션 중단 → 영상 멈춤
+ *
+ *   BackgroundWebView: onPause() + onWindowVisibilityChanged() 완전 차단
+ */
+@SuppressLint("ViewConstructor")
+class BackgroundWebView(context: android.content.Context) : WebView(context) {
+
+    override fun onPause() {
+        // ★ 완전 차단: super.onPause() 호출 안 함
+        // 시스템이 직접 호출해도 렌더러에 pause 신호 전달되지 않음
+    }
+
+    override fun onWindowVisibilityChanged(visibility: Int) {
+        // ★ 항상 VISIBLE로 강제
+        // Android가 GONE을 보내도 WebView는 항상 화면에 있다고 인식
+        super.onWindowVisibilityChanged(View.VISIBLE)
+    }
+
+    override fun onDetachedFromWindow() {
+        // ★ 윈도우 분리 시에도 pause 막음
+        // super.onDetachedFromWindow() 는 호출해야 메모리 누수 방지
+        super.onDetachedFromWindow()
+    }
+}
+
 class MainActivity : AppCompatActivity() {
 
     companion object {
@@ -25,13 +54,23 @@ class MainActivity : AppCompatActivity() {
         const val ASSET_URL  = "https://$ASSET_HOST/assets/index.html"
     }
 
-    private lateinit var webView:     WebView
+    private lateinit var webView:     BackgroundWebView
     private lateinit var bridge:      AndroidBridge
     private lateinit var assetLoader: WebViewAssetLoader
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private val OVERLAY_PERMISSION_REQUEST = 1001
     private var isOverlayActive = false
+
+    // ★ resumeTimers 주기적 호출 (100ms 간격)
+    // 시스템이 pauseTimers()를 호출해도 즉시 재개
+    private val resumeHandler = Handler(Looper.getMainLooper())
+    private val resumeRunnable = object : Runnable {
+        override fun run() {
+            try { webView.resumeTimers() } catch (_: Exception) {}
+            resumeHandler.postDelayed(this, 100)
+        }
+    }
 
     private val overlayControlReceiver = object : BroadcastReceiver() {
         override fun onReceive(ctx: Context?, intent: Intent?) {
@@ -40,6 +79,9 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    // ════════════════════════════════════════════
+    //  생명주기
+    // ════════════════════════════════════════════
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -48,8 +90,9 @@ class MainActivity : AppCompatActivity() {
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         setupFullscreen()
 
+        // ★ BackgroundWebView 사용
         val root = FrameLayout(this)
-        webView  = WebView(this)
+        webView  = BackgroundWebView(this)
         root.addView(webView, FrameLayout.LayoutParams(-1, -1))
         setContentView(root)
 
@@ -78,6 +121,9 @@ class MainActivity : AppCompatActivity() {
         webView.postDelayed({ requestBatteryOptimizationExemption() }, 3000)
 
         webView.loadUrl(ASSET_URL)
+
+        // ★ resumeTimers 루프 시작
+        resumeHandler.post(resumeRunnable)
     }
 
     override fun onResume() {
@@ -88,18 +134,19 @@ class MainActivity : AppCompatActivity() {
 
     override fun onPause() {
         super.onPause()
-        // ★ 핵심: onPause 에서 아무것도 하지 않음
-        // webView.onPause() 호출 시 Samsung WebView 렌더러가
-        // 즉시 미디어 스트림을 중단시킴
+        // ★ 아무것도 하지 않음
+        // BackgroundWebView.onPause() 가 이미 차단하지만
+        // 시스템이 Activity.onPause() 이후 WebView에 직접 접근하는 경우 대비
     }
 
     override fun onStop() {
         super.onStop()
-        // ★ 핵심: onStop 에서도 webView 건드리지 않음
-        // resumeTimers() 도 불필요 — onPause 에서 pause 하지 않았으므로
+        // ★ 아무것도 하지 않음
+        // resumeRunnable 이 계속 resumeTimers() 호출 중
     }
 
     override fun onDestroy() {
+        resumeHandler.removeCallbacks(resumeRunnable)
         try { unregisterReceiver(overlayControlReceiver) } catch (_: Exception) {}
         stopMusicService()
         scope.cancel()
@@ -174,15 +221,13 @@ class MainActivity : AppCompatActivity() {
             defaultTextEncodingName         = "UTF-8"
         }
 
-        // ★ 하드웨어 가속은 기본값(NONE) 유지
-        // LAYER_TYPE_HARDWARE 는 Samsung WebView 에서 미디어 재생 충돌 유발
         webView.setLayerType(View.LAYER_TYPE_NONE, null)
 
         // ★ 렌더러 우선순위: 백그라운드에서도 IMPORTANT 유지
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             webView.setRendererPriorityPolicy(
                 WebView.RENDERER_PRIORITY_IMPORTANT,
-                false  // 백그라운드에서도 우선순위 낮추지 않음
+                false   // 백그라운드에서도 우선순위 낮추지 않음
             )
         }
 
@@ -247,7 +292,7 @@ class MainActivity : AppCompatActivity() {
             override fun onRenderProcessGone(
                 view: WebView?, detail: RenderProcessGoneDetail?
             ): Boolean {
-                dlog("WebView 렌더러 종료 (crashed=${detail?.didCrash()})", "W")
+                dlog("렌더러 종료 (crashed=${detail?.didCrash()})", "W")
                 return true
             }
             override fun onReceivedError(
@@ -449,3 +494,20 @@ class MainActivity : AppCompatActivity() {
         }
     }
 }
+```
+
+---
+
+## 핵심 수정 요약
+```
+기존 문제:
+  앱 백그라운드 →
+  Android 시스템이 WebView.onWindowVisibilityChanged(GONE) 자동 호출 →
+  WebView 렌더러 스로틀링 →
+  YouTube IFrame requestAnimationFrame/타이머 중단 →
+  영상 멈춤
+
+해결:
+  BackgroundWebView.onWindowVisibilityChanged() → 항상 View.VISIBLE 전달
+  BackgroundWebView.onPause() → 완전 차단
+  resumeHandler → 100ms 마다 resumeTimers() 강제 호출
