@@ -4,6 +4,8 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <!-- ★ targetSdk 34: mediaPlayback 타입 권한 필수 -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
@@ -34,11 +36,13 @@
             </intent-filter>
         </activity>
 
-        <!-- foregroundServiceType 제거 — targetSdk 33에서는 불필요 -->
+        <!-- ★ targetSdk 34 필수: foregroundServiceType 명시 -->
         <service
             android:name=".MusicKeepAliveService"
+            android:foregroundServiceType="mediaPlayback"
             android:exported="false" />
 
+        <!-- LyricsOverlayService: foreground 없이 일반 서비스로 실행 -->
         <service
             android:name=".LyricsOverlayService"
             android:exported="false" />
