@@ -1,5 +1,5 @@
 /*
- * XWare Android CSS v4.7
+ * XWare Android CSS v4.8
  */
 
 /* ════════════════════════════
@@ -10,7 +10,12 @@ html.android {
   --sab:       env(safe-area-inset-bottom, 0px);
   --tab-h:     56px;
   --tab-total: calc(var(--tab-h) + var(--sab));
-  --bh:        68px;
+  /* ★ --bh = 실제 바 높이(66px) + 간격(12px) = 78px
+     align-self: start 로 바는 66px만 차지하고
+     나머지 12px는 body 배경이 보여 → 자연스러운 간격 */
+  --bar-h:     66px;
+  --bar-gap:   12px;
+  --bh:        calc(var(--bar-h) + var(--bar-gap));
 }
 
 /* ════════════════════════════
@@ -83,66 +88,103 @@ html.android .view > div:first-child {
 
 /* ════════════════════════════
    7. Bottom Bar (하단 플레이어)
-   ★ 구조: [앨범아트 | 타이틀+아티스트 | 즐겨찾기 | 오버레이 | 재생]
-           [──────────── 진행바 (하단 2px) ─────────────────────────]
+   ★ 레이아웃: [앨범아트] [타이틀+아티스트] [오버레이] [+추가] [▶재생]
+   ★ align-self: start → 바 아래 --bar-gap 만큼 body 배경 노출 = 간격
+   ★ 좌우 padding 동일(12px) → 대칭
 ════════════════════════════ */
 html.android #bar {
   grid-area:   bar                              !important;
+  align-self:  start                            !important; /* ★ 간격 핵심 */
   display:     flex                             !important;
   flex-direction: row                           !important;
   align-items: center                           !important;
   position:    relative                         !important;
-  padding:     0 10px                           !important;
+  padding:     0 12px                           !important; /* ★ 좌우 대칭 12px */
   gap:         0                                !important;
-  height:      var(--bh)                        !important;
+  height:      var(--bar-h)                     !important;
   width:       100vw                            !important;
   max-width:   100vw                            !important;
   box-sizing:  border-box                       !important;
   backdrop-filter: none                         !important;
   -webkit-backdrop-filter: none                 !important;
-  background:  rgba(8,8,18,0.97)                !important;
+  background:  rgba(8,8,20,0.97)                !important;
   border-top:  1px solid rgba(255,255,255,0.07) !important;
   transition:  none                             !important;
   overflow:    hidden                           !important;
-  /* grid-template-columns 완전 제거 */
-  grid-template-columns: none !important;
+  grid-template-columns: none                   !important;
 }
 
-/* ── 트랙 정보 영역 ── */
+/* ── 앨범 아트 + 텍스트 (flex:1) ── */
 html.android .bt {
-  display:     flex         !important;
-  flex:        1            !important;
-  min-width:   0            !important;
-  gap:         10px         !important;
-  align-items: center       !important;
-  cursor:      pointer      !important;
+  display:     flex   !important;
+  flex:        1      !important;
+  min-width:   0      !important;
+  gap:         11px   !important;
+  align-items: center !important;
+  cursor:      pointer !important;
 }
 html.android .bt-art {
-  width:         44px       !important;
-  height:        44px       !important;
-  border-radius: 8px        !important;
-  flex-shrink:   0          !important;
-  box-shadow:    0 2px 8px rgba(0,0,0,0.5) !important;
+  width:         44px !important;
+  height:        44px !important;
+  border-radius: 8px  !important;
+  flex-shrink:   0    !important;
+  box-shadow:    0 2px 10px rgba(0,0,0,0.55) !important;
 }
 html.android .bt-m {
-  flex:      1              !important;
-  min-width: 0              !important;
+  flex:      1 !important;
+  min-width: 0 !important;
 }
 html.android .bt-title {
-  font-size:     13px       !important;
-  font-weight:   700        !important;
-  white-space:   nowrap     !important;
-  overflow:      hidden     !important;
-  text-overflow: ellipsis   !important;
+  font-size:     13.5px   !important;
+  font-weight:   700      !important;
+  white-space:   nowrap   !important;
+  overflow:      hidden   !important;
+  text-overflow: ellipsis !important;
   color:         rgba(255,255,255,0.95) !important;
-  margin-bottom: 2px        !important;
+  margin-bottom: 2px !important;
 }
 html.android .bt-ch {
-  font-size:     11px       !important;
+  font-size:     11px     !important;
   color:         rgba(255,255,255,0.45) !important;
-  white-space:   nowrap     !important;
-  overflow:      hidden     !important;
-  text-overflow: ellipsis   !important;
+  white-space:   nowrap   !important;
+  overflow:      hidden   !important;
+  text-overflow: ellipsis !important;
+}
+
+/* ── 오버레이 버튼 ── */
+html.android #bt-overlay-btn,
+html.android .bt-overlay-btn {
+  display:         flex     !important;
+  align-items:     center   !important;
+  justify-content: center   !important;
+  width:           36px     !important;
+  height:          36px     !important;
+  flex-shrink:     0        !important;
+  color:           rgba(255,255,255,0.55) !important;
+  background:      none     !important;
+  border:          none     !important;
+}
+html.android #bt-overlay-btn.on {
+  color: var(--acc) !important;
+}
+
+/* ── ★ 플레이리스트 추가 버튼 (bridge.js 주입) ── */
+html.android .bt-addpl-btn,
+html.android #bt-addpl-btn {
+  display:         flex     !important;
+  align-items:     center   !important;
+  justify-content: center   !important;
+  width:           36px     !important;
+  height:          36px     !important;
+  flex-shrink:     0        !important;
+  color:           rgba(255,255,255,0.55) !important;
+  background:      none     !important;
+  border:          none     !important;
+  cursor:          pointer  !important;
+  -webkit-tap-highlight-color: transparent !important;
+}
+html.android #bt-addpl-btn:active {
+  color: rgba(255,255,255,0.9) !important;
 }
 
 /* ── 즐겨찾기 버튼 ── */
@@ -159,102 +201,81 @@ html.android .bt-fav.on svg path {
   fill: var(--acc) !important; stroke: var(--acc) !important;
 }
 
-/* ── 오버레이 버튼 ── */
-html.android #bt-overlay-btn,
-html.android .bt-overlay-btn {
-  display:         flex     !important;
-  align-items:     center   !important;
-  justify-content: center   !important;
-  width:           36px     !important;
-  height:          36px     !important;
-  flex-shrink:     0        !important;
-  color:           rgba(255,255,255,0.55) !important;
-}
-html.android #bt-overlay-btn.on,
-html.android .bt-overlay-btn.on {
-  color: var(--acc) !important;
-}
-
 /* ── 비주얼라이저·에코·볼륨 숨김 ── */
 html.android .vizz { display: none !important; }
 html.android .be   { display: none !important; }
 
-/* ── 컨트롤 영역: 재생 버튼만 표시 ── */
+/* ── 컨트롤 영역 ── */
 html.android .bc {
-  display:         flex     !important;
-  flex-direction:  row      !important;
-  align-items:     center   !important;
-  flex:            0 0 auto !important;
-  gap:             0        !important;
+  display:        flex    !important;
+  flex-direction: row     !important;
+  align-items:    center  !important;
+  flex:           0 0 auto !important;
+  gap:            0       !important;
 }
 html.android .bc-row {
-  display:     flex         !important;
-  align-items: center       !important;
-  gap:         0            !important;
+  display:     flex   !important;
+  align-items: center !important;
+  gap:         0      !important;
 }
 
-/* 이전/다음/셔플/반복 숨김 */
+/* 이전·다음·셔플·반복 숨김 */
 html.android #cb-sh,
 html.android #cb-rep,
 html.android .cb:not(.cb-play) { display: none !important; }
 
-/* 재생/정지 버튼 — 원형 */
+/* ★ 재생/정지 버튼 — 참고 이미지처럼 원형 없이 아이콘만 */
 html.android .cb-play,
 html.android .cb.cb-play {
-  display:         flex     !important;
-  align-items:     center   !important;
-  justify-content: center   !important;
-  width:           40px     !important;
-  height:          40px     !important;
-  min-width:       40px     !important;
-  min-height:      40px     !important;
-  border-radius:   50%      !important;
-  background:      rgba(255,255,255,0.10) !important;
-  flex-shrink:     0        !important;
-  color:           rgba(255,255,255,0.95) !important;
+  display:         flex   !important;
+  align-items:     center !important;
+  justify-content: center !important;
+  width:           44px   !important;
+  height:          44px   !important;
+  min-width:       44px   !important;
+  min-height:      44px   !important;
+  border-radius:   0      !important;
+  background:      none   !important;
+  flex-shrink:     0      !important;
+  color:           rgba(255,255,255,0.92) !important;
+  margin-left:     2px    !important;
 }
 
-/* ── 진행바: 하단 2px 얇은 바 ── */
+/* ── 진행바: 하단 2px 얇은 선 ── */
 html.android .pb-row {
-  display:  flex            !important;
-  position: absolute        !important;
-  bottom:   0               !important;
-  left:     0               !important;
-  right:    0               !important;
-  width:    100%            !important;
-  height:   2px             !important;
-  padding:  0               !important;
-  gap:      0               !important;
-  margin:   0               !important;
+  display:  flex     !important;
+  position: absolute !important;
+  bottom:   0        !important;
+  left:     0        !important;
+  right:    0        !important;
+  width:    100%     !important;
+  height:   2px      !important;
+  padding:  0        !important;
+  gap:      0        !important;
+  margin:   0        !important;
 }
-/* 시간 텍스트 숨김 */
 html.android .pb-t { display: none !important; }
-/* 진행바 컨테이너 */
 html.android .pb {
-  flex:          1          !important;
-  height:        2px        !important;
-  background:    rgba(255,255,255,0.12) !important;
-  border-radius: 0          !important;
-  position:      relative   !important;
-  overflow:      hidden     !important;
+  flex:          1    !important;
+  height:        2px  !important;
+  background:    rgba(255,255,255,0.10) !important;
+  border-radius: 0    !important;
+  position:      relative !important;
+  overflow:      hidden !important;
 }
-/* 재생된 부분 */
 html.android .pbf {
-  position:      absolute   !important;
-  left:          0          !important;
-  top:           0          !important;
-  height:        100%       !important;
-  background:    var(--acc) !important;
-  border-radius: 0          !important;
+  position:  absolute !important;
+  left:      0        !important; top: 0 !important;
+  height:    100%     !important;
+  background: var(--acc) !important;
+  border-radius: 0    !important;
 }
-/* 버퍼된 부분 */
 html.android .pbd {
-  position:      absolute   !important;
-  left:          0          !important;
-  top:           0          !important;
-  height:        100%       !important;
-  background:    rgba(255,255,255,0.20) !important;
-  border-radius: 0          !important;
+  position:  absolute !important;
+  left:      0        !important; top: 0 !important;
+  height:    100%     !important;
+  background: rgba(255,255,255,0.18) !important;
+  border-radius: 0    !important;
 }
 
 /* ════════════════════════════
