@@ -1,6 +1,5 @@
 /*
- * XWare Android CSS v4.2
- * html.android 접두사로 특이도(specificity) 문제 완전 해결
+ * XWare Android CSS v4.3
  */
 
 /* ════════════════════════════
@@ -11,16 +10,24 @@ html.android {
   --sab:       env(safe-area-inset-bottom, 0px);
   --tab-h:     56px;
   --tab-total: calc(var(--tab-h) + var(--sab));
+  /* ★ 하단 바 높이: 2행 레이아웃에 맞게 96px */
+  --bh:        96px;
 }
 
 /* ════════════════════════════
-   2. 한국어 폰트 (깨짐 방지)
+   2. 폰트
+   ★ 영어·한글 모두 굵게:
+   - Pretendard 로드 실패 시에도 시스템 폰트로 900 적용
+   - font-synthesis: none → 가짜 bold 방지
 ════════════════════════════ */
 html.android,
 html.android * {
   font-family:
     'Pretendard', 'Noto Sans KR', 'Apple SD Gothic Neo',
-    -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    'Malgun Gothic', -apple-system, BlinkMacSystemFont,
+    'Segoe UI', Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  font-synthesis: none;
 }
 
 /* ════════════════════════════
@@ -53,7 +60,6 @@ html.android #ov-bar-wrap { display: none !important; }
 
 /* ════════════════════════════
    5. Shell — 세로 3행 그리드
-   ★ transition 제거: 레이아웃 전환 중 깜빡임 방지
 ════════════════════════════ */
 html.android #shell {
   grid-template-columns: 1fr                             !important;
@@ -83,49 +89,104 @@ html.android .view > div:first-child {
 }
 
 /* ════════════════════════════
-   7. Bottom Bar — 세로 2행
-   ★ html.android #bar 로 ID 선택자 충돌 완전 해결
+   7. Bottom Bar (하단 플레이어)
+   ★ --bh 96px에 맞춘 2행 레이아웃
 ════════════════════════════ */
 html.android #bar {
-  grid-area:             bar                  !important;
-  display:               flex                 !important;
-  flex-direction:        column               !important;
-  justify-content:       center               !important;
-  align-items:           stretch              !important;
-  padding:               6px 14px 5px         !important;
-  gap:                   3px                  !important;
-  grid-template-columns: none                 !important;
-  height:                var(--bh)            !important;
-  width:                 100vw                !important;
-  max-width:             100vw                !important;
-  box-sizing:            border-box           !important;
-  backdrop-filter:       none                 !important;
-  -webkit-backdrop-filter: none               !important;
-  background:            rgba(4,4,12,0.97)    !important;
-  transition:            none                 !important;
+  grid-area:             bar                     !important;
+  display:               flex                    !important;
+  flex-direction:        column                  !important;
+  justify-content:       center                  !important;
+  align-items:           stretch                 !important;
+  /* 상하 패딩 줄여서 2행이 96px 안에 들어오게 */
+  padding:               5px 12px 5px            !important;
+  gap:                   4px                     !important;
+  grid-template-columns: none                    !important;
+  height:                var(--bh)               !important;
+  width:                 100vw                   !important;
+  max-width:             100vw                   !important;
+  box-sizing:            border-box              !important;
+  backdrop-filter:       none                    !important;
+  -webkit-backdrop-filter: none                  !important;
+  background:            rgba(6,6,16,0.98)       !important;
+  border-top:            1px solid rgba(255,255,255,0.08) !important;
+  transition:            none                    !important;
+  overflow:              hidden                  !important;
 }
+
+/* 1행: 트랙 정보 */
 html.android .bt {
-  display:     flex   !important;
-  width:       100%   !important;
-  min-width:   0      !important;
-  gap:         8px    !important;
+  display:     flex    !important;
+  width:       100%    !important;
+  min-width:   0       !important;
+  gap:         9px     !important;
+  align-items: center  !important;
+  flex:        0 0 auto !important;
+}
+html.android .bt-art {
+  width:        36px   !important;
+  height:       36px   !important;
+  border-radius: 7px   !important;
+  flex-shrink:  0      !important;
+}
+html.android .bt-m {
+  flex:      1 !important;
+  min-width: 0 !important;
+}
+html.android .bt-title {
+  font-size:   12.5px                 !important;
+  font-weight: 700                    !important;
+  white-space: nowrap                 !important;
+  overflow:    hidden                 !important;
+  text-overflow: ellipsis             !important;
+}
+html.android .bt-ch {
+  font-size: 10px !important;
+}
+/* 즐겨찾기·오버레이 버튼: 우측에 유지 */
+html.android .bt-fav,
+html.android .bt-overlay-btn,
+html.android #bt-overlay-btn { flex-shrink: 0 !important; }
+/* 비주얼라이저: 좁은 화면에서 숨김 */
+html.android .vizz { display: none !important; }
+
+/* 볼륨/에코 영역 숨김 */
+html.android .be { display: none !important; }
+
+/* 2행: 컨트롤 + 프로그레스 */
+html.android .bc {
+  display:         flex   !important;
+  flex-direction:  column !important;
+  align-items:     center !important;
+  width:           100%   !important;
+  gap:             2px    !important;
+  flex:            0 0 auto !important;
+}
+/* 셔플·반복 숨김 (공간 확보) */
+html.android #cb-sh,
+html.android #cb-rep { display: none !important; }
+
+html.android .bc-row {
+  gap:         20px !important;
   align-items: center !important;
 }
-html.android .bt-art   { width: 38px !important; height: 38px !important; }
-html.android .bt-m     { flex: 1 !important; min-width: 0 !important; }
-html.android .bt-title { font-size: 12px !important; }
-html.android .bt-ch    { font-size: 10px !important; }
-html.android #cb-sh,
-html.android #cb-rep   { display: none !important; }
-html.android .be       { display: none !important; }
-html.android .bc {
-  display:        flex   !important;
-  flex-direction: column !important;
-  align-items:    center !important;
-  width:          100%   !important;
-  gap:            2px    !important;
+html.android .cb {
+  min-width:  36px !important;
+  min-height: 36px !important;
 }
-html.android .bc-row { gap: 14px !important; }
+html.android .cb-play {
+  width:  40px !important;
+  height: 40px !important;
+}
+
+/* 프로그레스 바 */
+html.android .pb-row {
+  width: 100% !important;
+  gap:   6px  !important;
+}
+html.android .pb {
+  height: 3px !important;
+}
 
 /* ════════════════════════════
    8. 하단 탭바
@@ -151,41 +212,40 @@ html.android .nav-lbl,
 html.android .fav-sc-wrap        { display: none !important; }
 html.android .nav-sec ~ .nav-sec { display: none !important; }
 html.android .nav-sec {
-  display:         flex              !important;
-  flex-direction:  row               !important;
-  flex:            0 0 var(--tab-h)  !important;
-  width:           100%              !important;
-  max-width:       100%              !important;
-  padding:         0                 !important;
-  margin:          0                 !important;
-  justify-content: space-around      !important;
-  height:          var(--tab-h)      !important;
+  display:         flex             !important;
+  flex-direction:  row              !important;
+  flex:            0 0 var(--tab-h) !important;
+  width:           100%             !important;
+  padding:         0                !important;
+  margin:          0                !important;
+  justify-content: space-around     !important;
+  height:          var(--tab-h)     !important;
 }
 html.android #side::after {
-  content:    ''                    ;
-  display:    block                  !important;
-  width:      100%                   !important;
-  height:     var(--sab)             !important;
-  min-height: var(--sab)             !important;
-  background: rgba(4,4,12,0.98)      !important;
-  flex-shrink: 0                     !important;
+  content:    ''                   ;
+  display:    block                 !important;
+  width:      100%                  !important;
+  height:     var(--sab)            !important;
+  min-height: var(--sab)            !important;
+  background: rgba(4,4,12,0.98)     !important;
+  flex-shrink: 0                    !important;
 }
 html.android .nb {
-  flex:            1 1 0px     !important;
-  flex-direction:  column      !important;
-  align-items:     center      !important;
-  justify-content: center      !important;
-  gap:             3px         !important;
-  padding:         5px 2px     !important;
-  max-width:       80px        !important;
-  border-radius:   0           !important;
-  font-size:       9px         !important;
-  font-weight:     700         !important;
-  border:          none        !important;
-  background:      transparent !important;
-  height:          var(--tab-h)!important;
-  min-height:      unset       !important;
-  position:        relative    !important;
+  flex:            1 1 0px      !important;
+  flex-direction:  column       !important;
+  align-items:     center       !important;
+  justify-content: center       !important;
+  gap:             3px          !important;
+  padding:         5px 2px      !important;
+  max-width:       80px         !important;
+  border-radius:   0            !important;
+  font-size:       9px          !important;
+  font-weight:     700          !important;
+  border:          none         !important;
+  background:      transparent  !important;
+  height:          var(--tab-h) !important;
+  min-height:      unset        !important;
+  position:        relative     !important;
 }
 html.android .nb::before { display: none !important; }
 html.android .nb.on { color: var(--acc) !important; background: transparent !important; }
@@ -219,14 +279,13 @@ html.android .cgrid {
   gap: 10px !important;
 }
 html.android .hrow .card { flex: 0 0 148px !important; }
-html.android .c-fav      { opacity: 1 !important; }
-html.android .c-overlay  { opacity: 0 !important; }
+html.android .c-fav     { opacity: 1 !important; }
+html.android .c-overlay { opacity: 0 !important; }
 html.android .card:hover .c-img { transform: none !important; filter: none !important; }
 
 /* ════════════════════════════
    10. PiP (YouTube 플레이어)
-   ★ 원본 크기 유지 필수 — 1px 이하 시 YouTube 크래시
-   ★ visibility 건드리지 않음
+   ★ 원본 크기 유지 필수
 ════════════════════════════ */
 html.android #pip {
   position:       fixed   !important;
@@ -273,6 +332,7 @@ html.android .np-art-area.has-lyrics .np-art-shell {
 
 /* ════════════════════════════
    12. 가사 — Apple Music 스타일
+   ★ 영어·한글 모두 굵게
 ════════════════════════════ */
 html.android .np-art-area:not(.has-lyrics) .np-lyrics-panel {
   display: none !important;
@@ -302,33 +362,51 @@ html.android .np-lyrics-inner {
   display: flex !important; flex-direction: column !important;
   align-items: center !important; gap: 0 !important;
 }
+
+/* ★ 가사 기본: 모든 줄 굵게 (영어·한글 동일) */
 html.android .np-lyric-line {
-  display: block !important; text-align: center !important;
-  width: 100% !important; padding: 6px 16px !important;
-  font-size: 14px !important; font-weight: 700 !important;
-  color: rgba(255,255,255,0.18) !important;
-  transform: none !important; transform-origin: center !important;
-  cursor: pointer !important;
-  transition: color .3s ease, font-size .3s ease !important;
-  line-height: 1.45 !important;
-  word-break: keep-all !important; white-space: normal !important;
+  display:          block                  !important;
+  text-align:       center                 !important;
+  width:            100%                   !important;
+  padding:          6px 16px               !important;
+  font-size:        14px                   !important;
+  font-weight:      800                    !important;  /* 900→800: 더 안정적 */
+  font-style:       normal                 !important;
+  color:            rgba(255,255,255,0.20) !important;
+  transform:        none                   !important;
+  cursor:           pointer                !important;
+  transition:       color .3s ease, font-size .3s ease !important;
+  line-height:      1.5                    !important;
+  word-break:       keep-all               !important;
+  overflow-wrap:    break-word             !important;
+  letter-spacing:   -0.3px                !important;
 }
+
+/* ★ 이전 줄 */
 html.android .np-lyric-line.prev {
-  font-size: 15px !important; font-weight: 700 !important;
-  color: rgba(255,255,255,0.50) !important;
+  font-size:   15px                      !important;
+  font-weight: 800                       !important;
+  color:       rgba(255,255,255,0.52)    !important;
 }
+
+/* ★ 현재 줄: 가장 굵게, 가장 밝게 */
 html.android .np-lyric-line.active {
-  font-size: clamp(19px, 5vw, 24px) !important;
-  font-weight: 900 !important;
-  color: rgba(255,255,255,0.97) !important;
-  text-shadow: 0 0 24px rgba(255,255,255,0.18),
-               0 2px 12px rgba(0,0,0,0.6) !important;
-  transform: none !important;
+  font-size:   clamp(20px, 5.2vw, 25px) !important;
+  font-weight: 900                       !important;
+  color:       rgba(255,255,255,0.97)    !important;
+  text-shadow:
+    0 0 20px rgba(255,255,255,0.22),
+    0 2px 10px rgba(0,0,0,0.65)          !important;
+  letter-spacing: -0.5px                !important;
 }
+
+/* ★ 다음 줄들 */
 html.android .np-lyric-line.near {
-  font-size: 14px !important; font-weight: 700 !important;
-  color: rgba(255,255,255,0.35) !important;
+  font-size:   14px                      !important;
+  font-weight: 800                       !important;
+  color:       rgba(255,255,255,0.36)    !important;
 }
+
 html.android #np-no-lyrics,
 html.android .np-no-lyrics {
   font-size: 13px !important; text-align: center !important;
@@ -346,15 +424,20 @@ html.android .np-lyrics-loading {
 ════════════════════════════ */
 html.android .np-panel {
   flex-shrink: 0 !important;
-  padding: 16px 20px calc(max(var(--sab),8px) + 12px) !important;
+  padding: 14px 20px calc(max(var(--sab),8px) + 10px) !important;
 }
 html.android .np-overlay-btn,
 html.android #np-overlay-btn { display: inline-flex !important; }
 html.android #bt-overlay-btn  { display: inline-flex !important; }
-html.android #np-title { font-size: clamp(15px, 4.5vw, 20px) !important; }
-html.android #np-ch    { font-size: clamp(11px, 3vw,  14px)  !important; }
+html.android #np-title {
+  font-size:   clamp(15px, 4.5vw, 20px) !important;
+  font-weight: 700                       !important;
+}
+html.android #np-ch {
+  font-size:   clamp(11px, 3vw, 14px)   !important;
+}
 html.android .nc       { min-width: 44px !important; min-height: 44px !important; }
-html.android .nc-play  { width: 52px !important; height: 52px !important; }
+html.android .nc-play  { width: 52px    !important; height: 52px     !important; }
 
 /* ════════════════════════════
    14. 기타
@@ -363,10 +446,10 @@ html.android #toast {
   bottom: calc(var(--bh) + var(--tab-total) + 10px) !important;
 }
 html.android #pl-ctx-menu {
-  position: fixed !important; left: 50% !important;
+  position:  fixed !important; left: 50% !important;
   transform: translateX(-50%) !important;
-  bottom: calc(var(--bh) + var(--tab-total) + 12px) !important;
-  top: auto !important; min-width: 220px; max-width: 88vw;
+  bottom:    calc(var(--bh) + var(--tab-total) + 12px) !important;
+  top:       auto  !important; min-width: 220px; max-width: 88vw;
 }
 html.android button,
 html.android .nb,
