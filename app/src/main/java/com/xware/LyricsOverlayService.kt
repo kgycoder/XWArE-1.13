@@ -44,26 +44,34 @@ class LyricsOverlayService : Service() {
     private val TAG = "XWareOverlay"
     private var wm: WindowManager? = null
 
-    private var bubbleRoot:     FrameLayout?                  = null
-    private var bubbleIconView: android.widget.ImageView?     = null
-    private var panelPlayIcon:  android.widget.ImageView?     = null
-    private var panelTitleTv:   TextView?                     = null
-    private var panelView:      LinearLayout?                  = null
+    // ── 뷰 참조 ──────────────────────────────────
+    private var rootView:       FrameLayout?               = null
+    private var bubbleView:     FrameLayout?               = null
+    private var bubbleLp:       FrameLayout.LayoutParams?  = null
+    private var bubbleIconView: android.widget.ImageView?  = null
+    private var panelView:      LinearLayout?              = null
+    private var panelLp:        FrameLayout.LayoutParams?  = null
+    private var panelPlayIcon:  android.widget.ImageView?  = null
+    private var panelTitleTv:   TextView?                  = null
 
-    // ★ 패널 방향 관리를 위한 레이아웃 파라미터 참조
-    private var panelLp:        FrameLayout.LayoutParams?     = null
-
+    // ── 상태 ─────────────────────────────────────
     private var isPlaying  = false
     private var trackTitle = ""
     private var isExpanded = false
 
+    // ── 버블 위치 (스크린 절대좌표) ───────────────
+    private var bubLeft = 0    // 버블의 스크린 x 좌표
+    private var bubTop  = 0    // 버블의 스크린 y 좌표
+
+    // ── 상수 ─────────────────────────────────────
     private val BUBBLE_DP  = 52
     private val PANEL_W_DP = 200
-
-    private var initX = 0;   private var initY = 0
-    private var initTX = 0f; private var initTY = 0f
-    private var dragging = false
     private val DRAG_THRESHOLD = 8
+
+    // ── 드래그 추적 ───────────────────────────────
+    private var initBubLeft = 0; private var initBubTop = 0
+    private var initTouchX  = 0f; private var initTouchY = 0f
+    private var dragging    = false
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -71,7 +79,10 @@ class LyricsOverlayService : Service() {
         super.onCreate()
         createNotifChannel()
         wm = getSystemService(Context.WINDOW_SERVICE) as WindowManager
-        createBubble()
+        val screenW = resources.displayMetrics.widthPixels
+        bubLeft = dp(16)     // 초기 위치: 왼쪽
+        bubTop  = resources.displayMetrics.heightPixels / 3
+        createOverlay(screenW)
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -89,20 +100,24 @@ class LyricsOverlayService : Service() {
     }
 
     override fun onDestroy() {
-        removeBubble()
+        try { rootView?.let { wm?.removeView(it) } } catch (_: Exception) {}
+        rootView = null
         super.onDestroy()
     }
 
     // ══════════════════════════════════════════════
-    //  버블 생성
+    //  오버레이 생성
+    //  ★ root = 전체 화면 크기, lp.x=0 고정
+    //    버블은 root 내부에서 leftMargin/topMargin 으로 이동
+    //    → 패널 위치가 버블 기준으로 정확하게 계산됨
     // ══════════════════════════════════════════════
-    private fun createBubble() {
-        val bubPx   = dp(BUBBLE_DP)
-        val screenW = resources.displayMetrics.widthPixels
-        val screenH = resources.displayMetrics.heightPixels
+    private fun createOverlay(screenW: Int) {
+        val bubPx  = dp(BUBBLE_DP)
+        val panW   = dp(PANEL_W_DP)
 
-        // 버블 배경
+        // ── 버블 ──
         val bubble = FrameLayout(this)
+        bubbleView = bubble
         bubble.background = GradientDrawable().apply {
             shape = GradientDrawable.OVAL
             setColor(Color.argb(220, 10, 10, 20))
@@ -110,7 +125,6 @@ class LyricsOverlayService : Service() {
         }
         bubble.elevation = dp(6).toFloat()
 
-        // 버블 중앙 아이콘
         val iconView = android.widget.ImageView(this).apply {
             scaleType = android.widget.ImageView.ScaleType.CENTER_INSIDE
             setPadding(dp(14), dp(14), dp(14), dp(14))
@@ -119,76 +133,162 @@ class LyricsOverlayService : Service() {
         renderPlayIcon(iconView, isPlaying)
         bubble.addView(iconView, FrameLayout.LayoutParams(-1, -1))
 
-        // 컨트롤 패널
+        // ★ 버블 LayoutParams: leftMargin/topMargin 으로 위치 제어
+        val bLp = FrameLayout.LayoutParams(bubPx, bubPx).apply {
+            leftMargin = bubLeft
+            topMargin  = 0   // root의 y는 WindowManager로 제어
+            gravity    = Gravity.TOP or Gravity.START
+        }
+        bubbleLp = bLp
+
+        // ── 패널 ──
         val panel = buildPanel()
         panelView = panel
         panel.visibility = View.GONE
 
-        // ★ 패널 LayoutParams 저장 (방향 전환에 사용)
-        val pLp = FrameLayout.LayoutParams(dp(PANEL_W_DP), -2).apply {
-            marginStart = bubPx + dp(6)  // 초기: 버블 오른쪽
+        // ★ 패널 LayoutParams: 초기에는 버블 오른쪽
+        val pLp = FrameLayout.LayoutParams(panW, -2).apply {
+            leftMargin = bubLeft + bubPx + dp(6)
+            topMargin  = (bubPx - dp(PANEL_W_DP)) / 2  // 수직 중앙 정렬 (대략)
+            gravity    = Gravity.TOP or Gravity.START
         }
         panelLp = pLp
 
-        // 루트
+        // ── 루트 ──
         val root = FrameLayout(this)
-        bubbleRoot = root
-        root.addView(bubble, FrameLayout.LayoutParams(bubPx, bubPx))
-        root.addView(panel, pLp)
+        rootView = root
+        root.addView(bubble, bLp)
+        root.addView(panel,  pLp)
 
-        // WindowManager 파라미터
+        // ── WindowManager 파라미터 ──
+        // ★ 핵심: x=0, 전체 화면 폭. 버블이 내부에서 이동함
         val type = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
             WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
         else @Suppress("DEPRECATION") WindowManager.LayoutParams.TYPE_PHONE
 
-        val params = WindowManager.LayoutParams(
-            screenW,   // ★ 전체 폭 확보: 패널이 어느 방향이든 잘리지 않음
+        val wmLp = WindowManager.LayoutParams(
+            screenW,
             WindowManager.LayoutParams.WRAP_CONTENT,
             type,
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+            WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or  // ★ 버블 외 영역 터치 통과
             WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
             PixelFormat.TRANSLUCENT
         ).apply {
             gravity = Gravity.TOP or Gravity.START
             x = 0
-            y = screenH / 3
+            y = bubTop
         }
 
-        // 터치 이벤트
-        bubble.setOnTouchListener(object : View.OnTouchListener {
-            override fun onTouch(v: View, e: MotionEvent): Boolean {
-                val lp = (root.layoutParams as? WindowManager.LayoutParams) ?: params
-                when (e.action) {
-                    MotionEvent.ACTION_DOWN -> {
-                        initX = lp.x; initY = lp.y
-                        initTX = e.rawX; initTY = e.rawY
-                        dragging = false
-                    }
-                    MotionEvent.ACTION_MOVE -> {
-                        val dx = (e.rawX - initTX).toInt()
-                        val dy = (e.rawY - initTY).toInt()
-                        if (!dragging &&
-                            (Math.abs(dx) > DRAG_THRESHOLD || Math.abs(dy) > DRAG_THRESHOLD)) {
-                            dragging = true
-                            if (isExpanded) collapsePanel()
-                        }
-                        if (dragging) {
-                            lp.x = initX + dx; lp.y = initY + dy
-                            try { wm?.updateViewLayout(root, lp) } catch (_: Exception) {}
-                        }
-                    }
-                    MotionEvent.ACTION_UP -> {
-                        if (!dragging) togglePanel(lp)
-                        else snapToEdge(lp)
-                    }
+        // ── 터치 이벤트 ──
+        bubble.setOnTouchListener { _, e ->
+            when (e.action) {
+                MotionEvent.ACTION_DOWN -> {
+                    initBubLeft = bubLeft; initBubTop = bubTop
+                    initTouchX  = e.rawX;  initTouchY = e.rawY
+                    dragging = false; true
                 }
-                return true
+                MotionEvent.ACTION_MOVE -> {
+                    val dx = (e.rawX - initTouchX).toInt()
+                    val dy = (e.rawY - initTouchY).toInt()
+                    if (!dragging &&
+                        (Math.abs(dx) > DRAG_THRESHOLD || Math.abs(dy) > DRAG_THRESHOLD)) {
+                        dragging = true
+                        if (isExpanded) collapsePanel()
+                    }
+                    if (dragging) {
+                        bubLeft = (initBubLeft + dx).coerceIn(
+                            0, screenW - dp(BUBBLE_DP)
+                        )
+                        bubTop = initBubTop + dy
+                        // 버블 위치 업데이트
+                        bLp.leftMargin = bubLeft
+                        bubble.layoutParams = bLp
+                        // root y 위치 업데이트
+                        val lp = root.layoutParams as? WindowManager.LayoutParams ?: wmLp
+                        lp.y = bubTop
+                        try { wm?.updateViewLayout(root, lp) } catch (_: Exception) {}
+                    }
+                    true
+                }
+                MotionEvent.ACTION_UP -> {
+                    if (!dragging) showPanel(screenW)
+                    else snapToEdge(screenW)
+                    true
+                }
+                else -> false
             }
-        })
+        }
 
-        // 초기 위치: 왼쪽
-        params.x = dp(16)
-        wm?.addView(root, params)
+        wm?.addView(root, wmLp)
+    }
+
+    // ══════════════════════════════════════════════
+    //  패널 표시 — ★ 버블 위치 기반 좌/우 결정
+    // ══════════════════════════════════════════════
+    private fun showPanel(screenW: Int) {
+        if (isExpanded) { collapsePanel(); return }
+
+        val bubPx = dp(BUBBLE_DP)
+        val panW  = dp(PANEL_W_DP)
+        val gap   = dp(8)
+        val pLp   = panelLp ?: return
+
+        val onRight = (bubLeft + bubPx / 2) > screenW / 2
+
+        if (onRight) {
+            // 버블이 오른쪽 → 패널을 버블 왼쪽에 배치
+            val panelLeft = bubLeft - panW - gap
+            pLp.leftMargin = panelLeft.coerceAtLeast(dp(4))
+        } else {
+            // 버블이 왼쪽 → 패널을 버블 오른쪽에 배치
+            val panelLeft = bubLeft + bubPx + gap
+            pLp.leftMargin = panelLeft.coerceAtMost(screenW - panW - dp(4))
+        }
+
+        pLp.topMargin = 0
+        pLp.gravity   = Gravity.TOP or Gravity.START
+        panelView?.layoutParams = pLp
+        expandPanel()
+    }
+
+    private fun expandPanel() {
+        isExpanded = true
+        panelView?.apply {
+            visibility = View.VISIBLE
+            alpha = 0f; scaleX = 0.92f; scaleY = 0.92f
+            animate().alpha(1f).scaleX(1f).scaleY(1f)
+                .setDuration(200).setInterpolator(DecelerateInterpolator()).start()
+        }
+    }
+
+    private fun collapsePanel() {
+        isExpanded = false
+        panelView?.animate()
+            ?.alpha(0f)?.scaleX(0.92f)?.scaleY(0.92f)
+            ?.setDuration(160)
+            ?.withEndAction { panelView?.visibility = View.GONE }
+            ?.start()
+    }
+
+    // ══════════════════════════════════════════════
+    //  화면 끝으로 스냅
+    // ══════════════════════════════════════════════
+    private fun snapToEdge(screenW: Int) {
+        val root  = rootView ?: return
+        val bubPx = dp(BUBBLE_DP)
+        val targetLeft = if (bubLeft + bubPx / 2 < screenW / 2) dp(16)
+                         else screenW - bubPx - dp(16)
+        val startLeft = bubLeft
+        val anim = android.animation.ValueAnimator.ofInt(startLeft, targetLeft)
+        anim.duration = 220; anim.interpolator = DecelerateInterpolator()
+        anim.addUpdateListener { a ->
+            bubLeft = a.animatedValue as Int
+            val bLp = bubbleLp ?: return@addUpdateListener
+            bLp.leftMargin = bubLeft
+            bubbleView?.layoutParams = bLp
+        }
+        anim.start()
     }
 
     // ══════════════════════════════════════════════
@@ -222,7 +322,7 @@ class LyricsOverlayService : Service() {
             bottomMargin = dp(10)
         })
 
-        // 컨트롤 버튼 행
+        // 버튼 행
         val row = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity     = Gravity.CENTER
@@ -230,12 +330,12 @@ class LyricsOverlayService : Service() {
         }
         row.addView(makeSvgBtn(BtnType.PREV) { sendCmd("prevT()") })
 
-        // 재생/정지 버튼
+        // 재생/정지
         val playContainer = FrameLayout(this).apply {
             layoutParams = LinearLayout.LayoutParams(0, dp(40), 1f)
         }
         val playIv = android.widget.ImageView(this).apply {
-            scaleType    = android.widget.ImageView.ScaleType.CENTER_INSIDE
+            scaleType = android.widget.ImageView.ScaleType.CENTER_INSIDE
             setPadding(dp(8), dp(8), dp(8), dp(8))
             layoutParams = FrameLayout.LayoutParams(-1, -1)
         }
@@ -257,72 +357,17 @@ class LyricsOverlayService : Service() {
 
         // 종료 버튼
         val closeBtn = TextView(this).apply {
-            text    = "오버레이 종료"
+            text     = "오버레이 종료"
             textSize = 10f
             setTextColor(Color.argb(140, 255, 255, 255))
-            gravity = Gravity.CENTER
+            gravity  = Gravity.CENTER
             setPadding(0, dp(2), 0, dp(2))
         }
         closeBtn.setOnClickListener {
             sendCmd("if(typeof toggleOverlay==='function')toggleOverlay()")
         }
         panel.addView(closeBtn, LinearLayout.LayoutParams(-1, -2))
-
         return panel
-    }
-
-    // ══════════════════════════════════════════════
-    //  패널 토글 — ★ 버블 위치에 따라 패널 방향 결정
-    // ══════════════════════════════════════════════
-    private fun togglePanel(lp: WindowManager.LayoutParams) {
-        if (isExpanded) { collapsePanel(); return }
-
-        val screenW  = resources.displayMetrics.widthPixels
-        val bubPx    = dp(BUBBLE_DP)
-        val panelW   = dp(PANEL_W_DP)
-        val bubCenterX = lp.x + bubPx / 2
-
-        // 버블이 화면 오른쪽 절반에 있으면 패널을 왼쪽에 표시
-        val onRight  = bubCenterX > screenW / 2
-        val pLp      = panelLp ?: return
-
-        if (onRight) {
-            // 패널을 버블 왼쪽에 배치
-            pLp.marginStart = 0
-            pLp.marginEnd   = 0
-            // 버블의 루트-상대 x 계산: 버블은 lp.x 위치에 있고, root는 x=0에서 시작
-            // 버블 중심에서 패널 폭만큼 왼쪽으로
-            pLp.leftMargin  = lp.x - panelW - dp(6)
-            pLp.gravity     = Gravity.NO_GRAVITY
-        } else {
-            // 패널을 버블 오른쪽에 배치 (기본)
-            pLp.leftMargin  = lp.x + bubPx + dp(6)
-            pLp.gravity     = Gravity.NO_GRAVITY
-        }
-
-        panelView?.layoutParams = pLp
-        expandPanel()
-    }
-
-    private fun expandPanel() {
-        isExpanded = true
-        panelView?.apply {
-            visibility   = View.VISIBLE
-            alpha        = 0f
-            translationX = 0f
-            scaleX       = 0.9f; scaleY = 0.9f
-            animate().alpha(1f).scaleX(1f).scaleY(1f)
-                .setDuration(200).setInterpolator(DecelerateInterpolator()).start()
-        }
-    }
-
-    private fun collapsePanel() {
-        isExpanded = false
-        panelView?.animate()
-            ?.alpha(0f)?.scaleX(0.9f)?.scaleY(0.9f)
-            ?.setDuration(160)
-            ?.withEndAction { panelView?.visibility = View.GONE }
-            ?.start()
     }
 
     // ══════════════════════════════════════════════
@@ -340,53 +385,51 @@ class LyricsOverlayService : Service() {
         if (playing) {
             val bw = size * 0.22f; val bh = size * 0.60f
             val top = (size - bh) / 2f; val gap = size * 0.14f
-            val l1 = (size - bw * 2 - gap) / 2f
-            val r1 = dp(1).toFloat()
-            c.drawRoundRect(l1, top, l1 + bw, top + bh, r1, r1, p)
-            c.drawRoundRect(l1 + bw + gap, top, l1 + bw * 2 + gap, top + bh, r1, r1, p)
+            val l1 = (size - bw * 2 - gap) / 2f; val r = dp(1).toFloat()
+            c.drawRoundRect(l1, top, l1 + bw, top + bh, r, r, p)
+            c.drawRoundRect(l1 + bw + gap, top, l1 + bw * 2 + gap, top + bh, r, r, p)
         } else {
             val path = Path(); val h = size * 0.60f; val top = (size - h) / 2f
-            val lx = size * 0.30f
-            path.moveTo(lx, top); path.lineTo(lx + size * 0.44f, size / 2f)
-            path.lineTo(lx, top + h); path.close()
-            c.drawPath(path, p)
+            path.moveTo(size * 0.30f, top)
+            path.lineTo(size * 0.74f, size / 2f)
+            path.lineTo(size * 0.30f, top + h)
+            path.close(); c.drawPath(path, p)
         }
         iv.setImageBitmap(bmp)
     }
 
     private fun makeSvgBtn(type: BtnType, onClick: () -> Unit): FrameLayout {
-        val size    = dp(40)
-        val fl      = FrameLayout(this).apply {
-            layoutParams = LinearLayout.LayoutParams(0, size, 1f)
+        val fl = FrameLayout(this).apply {
+            layoutParams = LinearLayout.LayoutParams(0, dp(40), 1f)
         }
-        val iv      = android.widget.ImageView(this).apply {
+        val iv = android.widget.ImageView(this).apply {
             scaleType = android.widget.ImageView.ScaleType.CENTER_INSIDE
             setPadding(dp(8), dp(8), dp(8), dp(8))
         }
-        val bmpSize = dp(24)
-        val bmp     = Bitmap.createBitmap(bmpSize, bmpSize, Bitmap.Config.ARGB_8888)
-        val c       = Canvas(bmp)
-        val fill    = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        val bs = dp(24)
+        val bmp = Bitmap.createBitmap(bs, bs, Bitmap.Config.ARGB_8888)
+        val c   = Canvas(bmp)
+        val fill = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             color = Color.argb(220, 255, 255, 255); style = Paint.Style.FILL
         }
-        val stroke  = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        val stroke = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             color = Color.argb(220, 255, 255, 255); style = Paint.Style.STROKE
             strokeCap = Paint.Cap.ROUND; strokeWidth = dp(2).toFloat()
         }
         when (type) {
             BtnType.PREV -> {
-                val path = Path(); val h = bmpSize * 0.54f; val top = (bmpSize - h) / 2f
-                val rx = bmpSize * 0.62f
-                path.moveTo(rx, top); path.lineTo(rx - bmpSize * 0.34f, bmpSize / 2f)
+                val h = bs * 0.54f; val top = (bs - h) / 2f; val rx = bs * 0.62f
+                val path = Path()
+                path.moveTo(rx, top); path.lineTo(rx - bs * 0.34f, bs / 2f)
                 path.lineTo(rx, top + h); path.close(); c.drawPath(path, fill)
-                val bx = bmpSize * 0.22f; c.drawLine(bx, top, bx, top + h, stroke)
+                val bx = bs * 0.22f; c.drawLine(bx, top, bx, top + h, stroke)
             }
             BtnType.NEXT -> {
-                val path = Path(); val h = bmpSize * 0.54f; val top = (bmpSize - h) / 2f
-                val lx = bmpSize * 0.24f
-                path.moveTo(lx, top); path.lineTo(lx + bmpSize * 0.34f, bmpSize / 2f)
+                val h = bs * 0.54f; val top = (bs - h) / 2f; val lx = bs * 0.24f
+                val path = Path()
+                path.moveTo(lx, top); path.lineTo(lx + bs * 0.34f, bs / 2f)
                 path.lineTo(lx, top + h); path.close(); c.drawPath(path, fill)
-                val bx = bmpSize * 0.78f; c.drawLine(bx, top, bx, top + h, stroke)
+                val bx = bs * 0.78f; c.drawLine(bx, top, bx, top + h, stroke)
             }
         }
         iv.setImageBitmap(bmp)
@@ -409,33 +452,10 @@ class LyricsOverlayService : Service() {
         }
     }
 
-    // ══════════════════════════════════════════════
-    //  스냅
-    // ══════════════════════════════════════════════
-    private fun snapToEdge(lp: WindowManager.LayoutParams) {
-        val root    = bubbleRoot ?: return
-        val screenW = resources.displayMetrics.widthPixels
-        val bubPx   = dp(BUBBLE_DP)
-        val target  = if (lp.x + bubPx / 2 < screenW / 2) dp(16)
-                      else screenW - bubPx - dp(16)
-        val anim    = android.animation.ValueAnimator.ofInt(lp.x, target)
-        anim.duration = 220; anim.interpolator = DecelerateInterpolator()
-        anim.addUpdateListener { a ->
-            lp.x = a.animatedValue as Int
-            try { wm?.updateViewLayout(root, lp) } catch (_: Exception) {}
-        }
-        anim.start()
-    }
-
     private fun sendCmd(js: String) {
         sendBroadcast(Intent("com.xware.OVERLAY_CONTROL").apply {
             putExtra("js", js); setPackage(packageName)
         })
-    }
-
-    private fun removeBubble() {
-        try { bubbleRoot?.let { wm?.removeView(it) } } catch (_: Exception) {}
-        bubbleRoot = null
     }
 
     private fun createNotifChannel() {
