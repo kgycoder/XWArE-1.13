@@ -32,6 +32,10 @@ class MainActivity : AppCompatActivity() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private val OVERLAY_PERMISSION_REQUEST = 1001
 
+    // ★ 핵심: 오버레이 활성 상태 추적
+    // false 상태에서 LyricsOverlayService 를 절대 건드리지 않음
+    private var isOverlayActive = false
+
     private val overlayControlReceiver = object : BroadcastReceiver() {
         override fun onReceive(ctx: Context?, intent: Intent?) {
             val js = intent?.getStringExtra("js") ?: return
@@ -45,6 +49,11 @@ class MainActivity : AppCompatActivity() {
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        // ★ 크래시 로그 저장 핸들러
+        // 크래시 발생 시 다음 실행 때 AlertDialog 로 원인 표시
+        setupCrashReporter()
+
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         setupFullscreen()
 
@@ -52,6 +61,9 @@ class MainActivity : AppCompatActivity() {
         webView  = WebView(this)
         root.addView(webView, FrameLayout.LayoutParams(-1, -1))
         setContentView(root)
+
+        // 이전 크래시 로그가 있으면 표시
+        showPreviousCrashIfAny()
 
         assetLoader = WebViewAssetLoader.Builder()
             .setDomain(ASSET_HOST)
@@ -75,7 +87,6 @@ class MainActivity : AppCompatActivity() {
         requestNotificationPermission()
         webView.postDelayed({ requestBatteryOptimizationExemption() }, 3000)
 
-        dlog("앱 시작 → $ASSET_URL")
         webView.loadUrl(ASSET_URL)
     }
 
@@ -115,6 +126,36 @@ class MainActivity : AppCompatActivity() {
     }
 
     // ════════════════════════════════════════════
+    //  크래시 리포터
+    // ════════════════════════════════════════════
+    private fun setupCrashReporter() {
+        val defaultHandler = Thread.getDefaultUncaughtExceptionHandler()
+        Thread.setDefaultUncaughtExceptionHandler { thread, throwable ->
+            try {
+                val log = buildString {
+                    append("Thread: ${thread.name}\n")
+                    append("Error: ${throwable.message}\n\n")
+                    append(throwable.stackTraceToString().take(3000))
+                }
+                getSharedPreferences("xware_crash", Context.MODE_PRIVATE)
+                    .edit().putString("log", log).apply()
+            } catch (_: Exception) {}
+            defaultHandler?.uncaughtException(thread, throwable)
+        }
+    }
+
+    private fun showPreviousCrashIfAny() {
+        val prefs = getSharedPreferences("xware_crash", Context.MODE_PRIVATE)
+        val log   = prefs.getString("log", null) ?: return
+        prefs.edit().remove("log").apply()
+        android.app.AlertDialog.Builder(this)
+            .setTitle("크래시 로그 (개발자용)")
+            .setMessage(log)
+            .setPositiveButton("확인", null)
+            .show()
+    }
+
+    // ════════════════════════════════════════════
     //  WebView 설정
     // ════════════════════════════════════════════
     @SuppressLint("SetJavaScriptEnabled")
@@ -138,6 +179,17 @@ class MainActivity : AppCompatActivity() {
             cacheMode                       = WebSettings.LOAD_DEFAULT
             databaseEnabled                 = true
             defaultTextEncodingName         = "UTF-8"
+        }
+
+        // ★ LAYER_TYPE_HARDWARE 제거 — Samsung Galaxy GPU 충돌 방지
+        webView.setLayerType(View.LAYER_TYPE_NONE, null)
+
+        // ★ WebView 렌더러 우선순위 높임 — OOM kill 방지
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            webView.setRendererPriorityPolicy(
+                WebView.RENDERER_PRIORITY_IMPORTANT,
+                false  // 백그라운드에서도 우선순위 유지
+            )
         }
 
         webView.webChromeClient = object : WebChromeClient() {
@@ -178,7 +230,6 @@ class MainActivity : AppCompatActivity() {
         }
 
         webView.webViewClient = object : WebViewClient() {
-
             override fun shouldInterceptRequest(
                 view: WebView?, request: WebResourceRequest?
             ): WebResourceResponse? {
@@ -201,22 +252,13 @@ class MainActivity : AppCompatActivity() {
                 """.trimIndent(), null)
             }
 
-            // ★ 핵심: WebView 렌더러 프로세스가 죽었을 때 앱 크래시 방지
-            //   삼성 Android 14에서 YouTube 재생 시 렌더러가 kill 당하는 경우 처리
+            // ★ WebView 렌더러 크래시 복구 — true 반환으로 앱 종료 방지
             override fun onRenderProcessGone(
                 view: WebView?,
                 detail: RenderProcessGoneDetail?
             ): Boolean {
-                dlog("WebView 렌더러 종료 — 재시작 시도 (crashed=${detail?.didCrash()})", "W")
-                return try {
-                    // 기존 WebView 제거 후 새로 생성하지 않고 페이지만 리로드
-                    // (true 반환 = 앱은 살아있음)
-                    webView.loadUrl(ASSET_URL)
-                    true
-                } catch (e: Exception) {
-                    dlog("렌더러 복구 실패: $e", "E")
-                    true // 그래도 true 반환해서 앱 종료 방지
-                }
+                dlog("WebView 렌더러 종료 (crashed=${detail?.didCrash()})", "W")
+                return true  // 앱을 살린 상태로 유지
             }
 
             override fun onReceivedError(
@@ -253,7 +295,6 @@ class MainActivity : AppCompatActivity() {
 
         bridge = AndroidBridge(WeakReference(this), webView, scope)
         webView.addJavascriptInterface(bridge, "AndroidBridge")
-        webView.setLayerType(View.LAYER_TYPE_HARDWARE, null)
     }
 
     // ════════════════════════════════════════════
@@ -276,9 +317,11 @@ class MainActivity : AppCompatActivity() {
     //  오버레이 모드
     // ════════════════════════════════════════════
     fun setOverlayMode(active: Boolean) {
+        isOverlayActive = active
         if (active) {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M &&
                 !Settings.canDrawOverlays(this)) {
+                isOverlayActive = false  // 권한 없으면 비활성 유지
                 Toast.makeText(
                     this,
                     "설정 → 앱 → X-WARE → '다른 앱 위에 표시' 허용 후 다시 시도하세요",
@@ -311,6 +354,7 @@ class MainActivity : AppCompatActivity() {
             _pendingOverlay = false
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M &&
                 Settings.canDrawOverlays(this)) {
+                isOverlayActive = true
                 startLyricsOverlay()
                 webView.evaluateJavascript(
                     "document.getElementById('bt-overlay-btn')?.classList.add('on');" +
@@ -330,14 +374,24 @@ class MainActivity : AppCompatActivity() {
     private fun stopLyricsOverlay() =
         stopService(Intent(this, LyricsOverlayService::class.java))
 
-    fun syncPlayStateToOverlay(playing: Boolean) =
+    // ★ 핵심 수정: isOverlayActive 가 false 면 LyricsOverlayService 절대 호출 안 함
+    //   오버레이 비활성 상태에서 startService() 호출 →
+    //   LyricsOverlayService.onCreate() → startForeground() →
+    //   MissingForegroundServiceTypeException (Android 14 크래시) 방지
+    fun syncPlayStateToOverlay(playing: Boolean) {
+        if (!isOverlayActive) return
         LyricsOverlayService.updatePlayState(this, playing)
+    }
 
-    fun syncTrackToOverlay(title: String, thumb: String) =
+    fun syncTrackToOverlay(title: String, thumb: String) {
+        if (!isOverlayActive) return
         LyricsOverlayService.updateTrack(this, title, thumb)
+    }
 
-    fun updateOverlayLyrics(prev: String, active: String, next: String) =
+    fun updateOverlayLyrics(prev: String, active: String, next: String) {
+        if (!isOverlayActive) return
         LyricsOverlayService.updateLyrics(this, prev, active, next)
+    }
 
     fun updateNotificationTitle(title: String) {
         sendBroadcast(Intent(MusicKeepAliveService.ACTION_UPDATE_TITLE).apply {
@@ -403,10 +457,12 @@ class MainActivity : AppCompatActivity() {
         super.onActivityResult(requestCode, resultCode, data)
         if (requestCode == OVERLAY_PERMISSION_REQUEST) {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M &&
-                Settings.canDrawOverlays(this))
+                Settings.canDrawOverlays(this)) {
+                isOverlayActive = true
                 startLyricsOverlay()
-            else
+            } else {
                 Toast.makeText(this, "권한 거부됨", Toast.LENGTH_SHORT).show()
+            }
         }
     }
 }
