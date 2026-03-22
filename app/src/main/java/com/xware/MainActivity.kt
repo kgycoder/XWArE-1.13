@@ -17,32 +17,14 @@ import androidx.webkit.WebViewAssetLoader
 import kotlinx.coroutines.*
 import java.lang.ref.WeakReference
 
-/**
- * ★ 백그라운드 재생 핵심:
- *   Android 시스템이 앱을 백그라운드로 보낼 때
- *   WebView.onWindowVisibilityChanged(GONE) 을 자동 호출 → 렌더러 스로틀링
- *   → YouTube IFrame 타이머/애니메이션 중단 → 영상 멈춤
- *
- *   BackgroundWebView: onPause() + onWindowVisibilityChanged() 완전 차단
- */
 @SuppressLint("ViewConstructor")
 class BackgroundWebView(context: android.content.Context) : WebView(context) {
-
     override fun onPause() {
-        // ★ 완전 차단: super.onPause() 호출 안 함
-        // 시스템이 직접 호출해도 렌더러에 pause 신호 전달되지 않음
+        // ★ 차단: 시스템이 호출해도 렌더러에 pause 전달 안 함
     }
-
     override fun onWindowVisibilityChanged(visibility: Int) {
-        // ★ 항상 VISIBLE로 강제
-        // Android가 GONE을 보내도 WebView는 항상 화면에 있다고 인식
+        // ★ 항상 VISIBLE 강제: 백그라운드에서도 렌더러 스로틀링 방지
         super.onWindowVisibilityChanged(View.VISIBLE)
-    }
-
-    override fun onDetachedFromWindow() {
-        // ★ 윈도우 분리 시에도 pause 막음
-        // super.onDetachedFromWindow() 는 호출해야 메모리 누수 방지
-        super.onDetachedFromWindow()
     }
 }
 
@@ -62,9 +44,8 @@ class MainActivity : AppCompatActivity() {
     private val OVERLAY_PERMISSION_REQUEST = 1001
     private var isOverlayActive = false
 
-    // ★ resumeTimers 주기적 호출 (100ms 간격)
-    // 시스템이 pauseTimers()를 호출해도 즉시 재개
-    private val resumeHandler = Handler(Looper.getMainLooper())
+    // ★ 100ms 마다 resumeTimers() 강제 호출 — 시스템 pauseTimers() 대응
+    private val resumeHandler  = Handler(Looper.getMainLooper())
     private val resumeRunnable = object : Runnable {
         override fun run() {
             try { webView.resumeTimers() } catch (_: Exception) {}
@@ -90,7 +71,6 @@ class MainActivity : AppCompatActivity() {
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         setupFullscreen()
 
-        // ★ BackgroundWebView 사용
         val root = FrameLayout(this)
         webView  = BackgroundWebView(this)
         root.addView(webView, FrameLayout.LayoutParams(-1, -1))
@@ -121,8 +101,6 @@ class MainActivity : AppCompatActivity() {
         webView.postDelayed({ requestBatteryOptimizationExemption() }, 3000)
 
         webView.loadUrl(ASSET_URL)
-
-        // ★ resumeTimers 루프 시작
         resumeHandler.post(resumeRunnable)
     }
 
@@ -132,18 +110,8 @@ class MainActivity : AppCompatActivity() {
         webView.resumeTimers()
     }
 
-    override fun onPause() {
-        super.onPause()
-        // ★ 아무것도 하지 않음
-        // BackgroundWebView.onPause() 가 이미 차단하지만
-        // 시스템이 Activity.onPause() 이후 WebView에 직접 접근하는 경우 대비
-    }
-
-    override fun onStop() {
-        super.onStop()
-        // ★ 아무것도 하지 않음
-        // resumeRunnable 이 계속 resumeTimers() 호출 중
-    }
+    override fun onPause()  { super.onPause() }
+    override fun onStop()   { super.onStop()  }
 
     override fun onDestroy() {
         resumeHandler.removeCallbacks(resumeRunnable)
@@ -223,11 +191,10 @@ class MainActivity : AppCompatActivity() {
 
         webView.setLayerType(View.LAYER_TYPE_NONE, null)
 
-        // ★ 렌더러 우선순위: 백그라운드에서도 IMPORTANT 유지
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             webView.setRendererPriorityPolicy(
                 WebView.RENDERER_PRIORITY_IMPORTANT,
-                false   // 백그라운드에서도 우선순위 낮추지 않음
+                false
             )
         }
 
@@ -399,6 +366,37 @@ class MainActivity : AppCompatActivity() {
 
     private fun startLyricsOverlay() {
         startService(Intent(this, LyricsOverlayService::class.java))
+
+        // ★ 서비스 시작 직후 현재 재생 상태·트랙 정보 즉시 동기화
+        // 버블이 처음 생성될 때 초기값(▶, "X-WARE") 대신 실제 상태로 표시
+        webView.postDelayed({
+            webView.evaluateJavascript("""
+                (function(){
+                    var playing = (typeof S !== 'undefined') ? !!S.playing : false;
+                    var title   = (typeof S !== 'undefined' && S.track) ? (S.track.title || '') : '';
+                    var thumb   = (typeof S !== 'undefined' && S.track) ? (S.track.thumb || '') : '';
+                    return JSON.stringify({ playing: playing, title: title, thumb: thumb });
+                })()
+            """.trimIndent()) { result ->
+                try {
+                    val clean = result
+                        .trim()
+                        .removeSurrounding("\"")
+                        .replace("\\\"", "\"")
+                        .replace("\\n", "")
+                        .replace("\\\\", "\\")
+                    val json    = org.json.JSONObject(clean)
+                    val playing = json.optBoolean("playing", false)
+                    val title   = json.optString("title", "")
+                    val thumb   = json.optString("thumb", "")
+
+                    LyricsOverlayService.updatePlayState(this, playing)
+                    if (title.isNotBlank())
+                        LyricsOverlayService.updateTrack(this, title, thumb)
+
+                } catch (_: Exception) { }
+            }
+        }, 300) // 서비스 초기화 완료 후 실행
     }
 
     private fun stopLyricsOverlay() {
