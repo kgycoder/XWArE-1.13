@@ -1,5 +1,5 @@
 /*
- * XWare Android CSS v4.9
+ * XWare Android CSS v5.0
  */
 
 /* ════════════════════════════
@@ -86,9 +86,6 @@ html.android .view > div:first-child {
 /* ════════════════════════════
    7. Bottom Bar
    ★ 둥근 모서리 플로팅 카드
-   ★ 좌우 12px 여백 → 화면과 분리
-   ★ align-self: start → 아래 bar-gap
-     만큼 body 배경 노출 (자연스러운 간격)
 ════════════════════════════ */
 html.android #bar {
   grid-area:             bar                              !important;
@@ -245,11 +242,11 @@ html.android button#cb-play {
   color:              rgba(255,255,255,0.90) !important;
 }
 html.android .cb-play svg,
-html.android #cb-play svg       { fill: currentColor !important; color: inherit !important; }
+html.android #cb-play svg   { fill: currentColor !important; }
 html.android .cb-play svg *,
-html.android #cb-play svg *     { fill: currentColor !important; stroke: currentColor !important; }
+html.android #cb-play svg * { fill: currentColor !important; stroke: currentColor !important; }
 
-/* ── 진행바: 하단 2px 얇은 선 ── */
+/* ── 진행바: 하단 2px ── */
 html.android .pb-row {
   display:  flex     !important;
   position: absolute !important;
@@ -273,16 +270,14 @@ html.android .pb {
 }
 html.android .pbf {
   position:      absolute !important;
-  left:          0        !important;
-  top:           0        !important;
+  left:          0        !important; top: 0 !important;
   height:        100%     !important;
   background:    var(--acc) !important;
   border-radius: 0          !important;
 }
 html.android .pbd {
   position:      absolute !important;
-  left:          0        !important;
-  top:           0        !important;
+  left:          0        !important; top: 0 !important;
   height:        100%     !important;
   background:    rgba(255,255,255,0.18) !important;
   border-radius: 0          !important;
@@ -354,9 +349,13 @@ html.android .nb.on {
   background: transparent !important;
 }
 html.android .nb.on::after {
-  content: ''; position: absolute;
-  top: 0; left: 20%; right: 20%;
-  height: 2px; background: var(--acc);
+  content:       '';
+  position:      absolute;
+  top:           0;
+  left:          20%;
+  right:         20%;
+  height:        2px;
+  background:    var(--acc);
   border-radius: 0 0 3px 3px;
 }
 html.android .nb .ni { width: 22px !important; height: 22px !important; }
@@ -383,8 +382,16 @@ html.android .cgrid {
   gap: 10px !important;
 }
 html.android .hrow .card { flex: 0 0 148px !important; }
-html.android .c-fav      { opacity: 1 !important; }
-html.android .c-overlay  { opacity: 0 !important; }
+
+/* ★ 카드 버튼 항상 표시 (Android 터치 기기 hover 없음) */
+html.android .c-fav     { opacity: 1 !important; }
+html.android .c-pl-add  { opacity: 1 !important; }
+html.android .c-pl-add:active {
+  background: rgba(250,45,90,0.45) !important;
+  transform:  scale(1.1)           !important;
+}
+
+html.android .c-overlay { opacity: 0 !important; }
 html.android .card:hover .c-img { transform: none !important; filter: none !important; }
 
 /* ════════════════════════════
