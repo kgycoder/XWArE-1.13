@@ -1,5 +1,5 @@
 /**
- * XWare Android Bridge v3.4
+ * XWare Android Bridge v3.5
  */
 (function () {
   'use strict';
@@ -50,7 +50,6 @@
 
   /* ════════════════════════════════════════════════
      Page Visibility 완전 차단
-     YouTube IFrame 이 백그라운드 감지 시 자동 일시정지 방지
   ════════════════════════════════════════════════ */
   try {
     Object.defineProperty(document, 'hidden', {
@@ -61,25 +60,19 @@
     });
   } catch(e) {}
 
-  /* visibilitychange 리스너 등록 자체를 차단 */
   var _origDocAdd = document.addEventListener.bind(document);
   document.addEventListener = function (type, fn, opts) {
     if (type === 'visibilitychange') return;
     return _origDocAdd(type, fn, opts);
   };
 
-  /* pagehide / freeze 차단 */
   window.addEventListener('pagehide', function(e){ e.stopImmediatePropagation(); }, true);
   window.addEventListener('freeze',   function(e){ e.stopImmediatePropagation(); }, true);
 
   /* ════ app.js 로드 후 초기화 ════════════════════ */
   window.addEventListener('load', function () {
 
-    /* ════════════════════════════════════════════
-       비트 이펙트 + bgLoop 완전 정지
-       bgLoop: requestAnimationFrame 기반 canvas 렌더링
-       → 매 프레임 메인 스레드 점유 → 가사 jank + 싱크 오차
-    ════════════════════════════════════════════ */
+    /* ── 비트 이펙트 + bgLoop 완전 정지 ─────────── */
     if (typeof BG !== 'undefined') {
       try {
         Object.defineProperty(BG, 'beat', {
@@ -96,54 +89,96 @@
     window.renderParticles = function(){};
     window.updateSpectrum  = function(){};
 
-    /* ★ requestAnimationFrame 오버라이드: bgLoop 차단 */
+    /* ★ requestAnimationFrame: bgLoop 차단 */
     var _origRAF = window.requestAnimationFrame;
     window.requestAnimationFrame = function(cb) {
       var fnStr = cb ? cb.toString().substring(0, 150) : '';
-      if (fnStr.indexOf('bgLoop')   !== -1 ||
-          fnStr.indexOf('BG.f++')   !== -1 ||
-          fnStr.indexOf('BG.orbs')  !== -1 ||
-          fnStr.indexOf('BG.beat')  !== -1) {
-        return 0;
-      }
+      if (fnStr.indexOf('bgLoop')  !== -1 ||
+          fnStr.indexOf('BG.f++')  !== -1 ||
+          fnStr.indexOf('BG.orbs') !== -1 ||
+          fnStr.indexOf('BG.beat') !== -1) return 0;
       return _origRAF(cb);
     };
 
-    /* ★ setInterval 오버라이드: 50ms 이하 BG 관련 타이머 차단 */
+    /* ★ setInterval: 50ms 이하 BG 관련 타이머 차단 */
     var _origSetInterval = window.setInterval;
     window.setInterval = function(fn, delay) {
       if (delay <= 50) {
         var fnStr = fn ? fn.toString().substring(0, 150) : '';
         if (fnStr.indexOf('updateNpColor') !== -1 ||
             fnStr.indexOf('BG.')           !== -1 ||
-            fnStr.indexOf('_moodH')        !== -1) {
-          return 0;
-        }
+            fnStr.indexOf('_moodH')        !== -1) return 0;
       }
       return _origSetInterval.apply(window, arguments);
     };
 
     /* ════════════════════════════════════════════
-       YT Player pauseVideo 인터셉트
-       백그라운드 전환 시 YouTube 자동 일시정지 차단
+       ★ 플레이리스트 추가 버튼 주입
+       참고 이미지처럼 오버레이 버튼 옆에 "+" 버튼 추가
     ════════════════════════════════════════════ */
-    var _xwUserPaused = false;
+    function injectAddButton() {
+      var overlayBtn = document.getElementById('bt-overlay-btn');
+      if (!overlayBtn || document.getElementById('bt-addpl-btn')) return;
 
+      var btn = document.createElement('button');
+      btn.id        = 'bt-addpl-btn';
+      btn.className = 'bt-addpl-btn';
+      btn.title     = '플레이리스트에 추가';
+      btn.innerHTML =
+        '<svg width="17" height="17" viewBox="0 0 17 17" fill="none" ' +
+        'stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">' +
+        '<circle cx="8.5" cy="8.5" r="7"/>' +
+        '<line x1="8.5" y1="5.2" x2="8.5" y2="11.8"/>' +
+        '<line x1="5.2" y1="8.5" x2="11.8" y2="8.5"/>' +
+        '</svg>';
+
+      btn.addEventListener('click', function (e) {
+        e.stopPropagation();
+        try {
+          /* 현재 재생 중인 트랙을 플레이리스트에 추가 */
+          if (typeof S !== 'undefined' && S.track) {
+            if (typeof plAddTrack === 'function') {
+              /* 플레이리스트 선택 모달 오픈 */
+              plAddTrack(S.track);
+            } else if (typeof ctxOpen === 'function') {
+              ctxOpen(S.track, S.qIdx !== undefined ? S.qIdx : 0, 'q');
+            } else if (typeof plAddModalOpen === 'function') {
+              plAddModalOpen();
+            }
+          } else {
+            if (typeof toast === 'function') toast('재생 중인 곡이 없습니다');
+          }
+        } catch(err) { console.warn('[Bridge] addpl:', err); }
+      });
+
+      /* 오버레이 버튼 바로 다음에 삽입 */
+      overlayBtn.parentNode.insertBefore(btn, overlayBtn.nextSibling);
+    }
+
+    /* DOM 준비 후 삽입 */
+    if (document.getElementById('bt-overlay-btn')) {
+      injectAddButton();
+    } else {
+      var obs = new MutationObserver(function() {
+        if (document.getElementById('bt-overlay-btn')) {
+          injectAddButton(); obs.disconnect();
+        }
+      });
+      obs.observe(document.body, { childList: true, subtree: true });
+    }
+
+    /* ── YT pauseVideo 인터셉트 ──────────────────── */
+    var _xwUserPaused = false;
     function installYTPauseHook() {
       if (!window.S || !S.ytPlayer) return;
       var player = S.ytPlayer;
       if (player._xwHooked) return;
       player._xwHooked = true;
-
       var _origPause = player.pauseVideo.bind(player);
       player.pauseVideo = function () {
-        if (_xwUserPaused) {
-          _xwUserPaused = false;
-          return _origPause();
-        }
+        if (_xwUserPaused) { _xwUserPaused = false; return _origPause(); }
         console.log('[Bridge] pauseVideo 자동 호출 차단');
       };
-
       var origToggle = window.togglePlay;
       if (typeof origToggle === 'function') {
         window.togglePlay = function () {
@@ -151,13 +186,10 @@
           return origToggle.apply(this, arguments);
         };
       }
-      console.log('[Bridge] YT pauseVideo 훅 설치 완료');
     }
-
     var hookTimer = setInterval(function () {
       if (window.S && S.ytPlayer && S.ytReady) {
-        installYTPauseHook();
-        clearInterval(hookTimer);
+        installYTPauseHook(); clearInterval(hookTimer);
       }
     }, 500);
 
