@@ -1,5 +1,5 @@
 /*
- * XWare Android CSS v4.0
+ * XWare Android CSS v4.1
  */
 
 /* ════════════════════════════
@@ -9,6 +9,8 @@
   --sat:   env(safe-area-inset-top,    0px);
   --sab:   env(safe-area-inset-bottom, 0px);
   --tab-h: 56px;
+  /* 탭바 실제 높이 = 탭 버튼 높이 + 하단 내비게이션 바 높이 */
+  --tab-total: calc(var(--tab-h) + var(--sab));
 }
 
 /* ════════════════════════════
@@ -53,10 +55,10 @@
    5. Shell — 세로 3행 그리드
 ════════════════════════════ */
 .android #shell {
-  grid-template-columns: 1fr                        !important;
-  grid-template-rows:    1fr var(--bh) var(--tab-h) !important;
-  grid-template-areas:   "main" "bar" "side"        !important;
-  overflow: visible                                 !important;
+  grid-template-columns: 1fr                             !important;
+  grid-template-rows:    1fr var(--bh) var(--tab-total)  !important;
+  grid-template-areas:   "main" "bar" "side"             !important;
+  overflow: visible                                      !important;
 }
 
 /* ════════════════════════════
@@ -78,21 +80,20 @@
 
 /* ════════════════════════════
    7. Bottom Bar — 세로 2행
-   (원본 240px 1fr 240px 제거)
 ════════════════════════════ */
 .android #bar {
-  grid-area:       bar               !important;
-  display:         flex              !important;
-  flex-direction:  column            !important;
-  justify-content: center            !important;
-  align-items:     stretch           !important;
-  padding:         6px 14px 5px      !important;
-  gap:             3px               !important;
-  grid-template-columns: none        !important;
-  height:          var(--bh)         !important;
-  backdrop-filter: none              !important;
-  -webkit-backdrop-filter: none      !important;
-  background:      rgba(4,4,12,0.97) !important;
+  grid-area:             bar                  !important;
+  display:               flex                 !important;
+  flex-direction:        column               !important;
+  justify-content:       center               !important;
+  align-items:           stretch              !important;
+  padding:               6px 14px 5px         !important;
+  gap:                   3px                  !important;
+  grid-template-columns: none                 !important;
+  height:                var(--bh)            !important;
+  backdrop-filter:       none                 !important;
+  -webkit-backdrop-filter: none               !important;
+  background:            rgba(4,4,12,0.97)    !important;
 }
 .android .bt {
   display:     flex   !important;
@@ -119,51 +120,69 @@
 
 /* ════════════════════════════
    8. 하단 탭바
+   ★ 내비게이션 바 겹침 방지:
+   탭 버튼은 상단 56px 에만 배치,
+   하단은 --sab 만큼 투명 패딩
 ════════════════════════════ */
 .android #side {
-  grid-area:       side                              !important;
-  flex-direction:  row                               !important;
-  align-items:     stretch                           !important;
-  padding:         0                                 !important;
-  height:          var(--tab-h)                      !important;
-  width:           100%                              !important;
-  max-width:       100%                              !important;
-  border-right:    none                              !important;
-  border-top:      1px solid rgba(255,255,255,0.07)  !important;
-  background:      rgba(4,4,12,0.98)                 !important;
-  backdrop-filter: none                              !important;
-  -webkit-backdrop-filter: none                      !important;
-  overflow:        hidden                            !important;
+  grid-area:             side                              !important;
+  flex-direction:        column                            !important;
+  align-items:           stretch                           !important;
+  padding:               0                                 !important;
+  height:                var(--tab-total)                  !important;
+  width:                 100%                              !important;
+  max-width:             100%                              !important;
+  border-right:          none                              !important;
+  border-top:            1px solid rgba(255,255,255,0.07)  !important;
+  background:            rgba(4,4,12,0.98)                 !important;
+  backdrop-filter:       none                              !important;
+  -webkit-backdrop-filter: none                            !important;
+  overflow:              hidden                            !important;
 }
+
+/* 탭 버튼 영역 — 56px 고정 */
 .android .logo,
 .android .nav-lbl,
 .android .fav-sc-wrap        { display: none !important; }
 .android .nav-sec ~ .nav-sec { display: none !important; }
 .android .nav-sec {
-  display:         flex         !important;
-  flex-direction:  row          !important;
-  flex:            1            !important;
-  width:           100%         !important;
-  max-width:       100%         !important;
-  padding:         0            !important;
-  margin:          0            !important;
-  justify-content: space-around !important;
+  display:         flex          !important;
+  flex-direction:  row           !important;
+  flex:            0 0 var(--tab-h) !important;
+  width:           100%          !important;
+  max-width:       100%          !important;
+  padding:         0             !important;
+  margin:          0             !important;
+  justify-content: space-around  !important;
+  height:          var(--tab-h)  !important;
 }
+
+/* 하단 내비게이션 바 안전 영역 — 탭바 아래에 빈 공간 */
+.android #side::after {
+  content:    ''              ;
+  display:    block           !important;
+  width:      100%            !important;
+  height:     var(--sab)      !important;
+  background: rgba(4,4,12,0.98) !important;
+  flex-shrink: 0              !important;
+}
+
 .android .nb {
-  flex:            1 1 0px    !important;
-  flex-direction:  column     !important;
-  align-items:     center     !important;
-  justify-content: center     !important;
-  gap:             3px        !important;
-  padding:         5px 2px    !important;
-  max-width:       80px       !important;
-  border-radius:   0          !important;
-  font-size:       9px        !important;
-  font-weight:     700        !important;
-  border:          none       !important;
+  flex:            1 1 0px     !important;
+  flex-direction:  column      !important;
+  align-items:     center      !important;
+  justify-content: center      !important;
+  gap:             3px         !important;
+  padding:         5px 2px     !important;
+  max-width:       80px        !important;
+  border-radius:   0           !important;
+  font-size:       9px         !important;
+  font-weight:     700         !important;
+  border:          none        !important;
   background:      transparent !important;
-  min-height:      var(--tab-h) !important;
-  position:        relative   !important;
+  height:          var(--tab-h)!important;
+  min-height:      unset       !important;
+  position:        relative    !important;
 }
 .android .nb::before { display: none !important; }
 .android .nb.on { color: var(--acc) !important; background: transparent !important; }
@@ -202,13 +221,20 @@
 .android .card:hover .c-img { transform: none !important; filter: none !important; }
 
 /* ════════════════════════════
-   10. PiP 숨김 (DOM 유지)
+   10. PiP (YouTube 플레이어)
+   ★ 크래시 방지: 1px 금지
+   원본 크기 유지 + 화면 밖 이동
 ════════════════════════════ */
 .android #pip {
-  position: fixed !important; top: -9999px !important;
-  left: -9999px !important; width: 1px !important;
-  height: 1px !important; overflow: hidden !important;
-  opacity: 0 !important; pointer-events: none !important;
+  position:       fixed           !important;
+  top:            -9999px         !important;
+  left:           -9999px         !important;
+  width:          296px           !important;  /* 원본 크기 유지 필수 */
+  height:         166px           !important;  /* 1px 하면 YouTube 크래시 */
+  overflow:       visible         !important;
+  opacity:        0               !important;
+  pointer-events: none            !important;
+  visibility:     hidden          !important;
 }
 
 /* ════════════════════════════
@@ -218,8 +244,6 @@
   top:  calc(max(var(--sat), 10px) + 10px) !important;
   left: 16px !important;
 }
-
-/* 아트 영역 공통 */
 .android .np-art-area {
   flex:            1      !important;
   min-height:      0      !important;
@@ -229,13 +253,9 @@
   padding: calc(max(var(--sat),20px) + 90px) 28px 16px !important;
   gap: 0 !important;
 }
-
-/* 가사 없을 때 아트 크기 */
 .android .np-art-area:not(.has-lyrics) .np-art-shell {
   width: clamp(260px, min(46vh, 80vw), 360px) !important;
 }
-
-/* 가사 있을 때 */
 .android .np-art-area.has-lyrics {
   flex-direction:  column     !important;
   align-items:     center     !important;
@@ -244,8 +264,6 @@
   padding-bottom:  0          !important;
   gap:             10px       !important;
 }
-
-/* 가사 있을 때 아트 크기 */
 .android .np-art-area.has-lyrics .np-art-shell {
   width:       clamp(210px, min(36vh, 72vw), 320px) !important;
   flex-shrink: 0 !important;
@@ -284,8 +302,10 @@
 }
 .android .np-lyrics-scroll::-webkit-scrollbar { display: none !important; }
 .android .np-lyrics-inner {
-  display: flex !important; flex-direction: column !important;
-  align-items: center !important; gap: 0 !important;
+  display:        flex   !important;
+  flex-direction: column !important;
+  align-items:    center !important;
+  gap:            0      !important;
 }
 .android .np-lyric-line {
   display:          block                  !important;
@@ -324,10 +344,13 @@
   color: rgba(255,255,255,0.3) !important; padding: 20px !important;
 }
 .android .np-lyrics-loading {
-  display: flex !important; flex-direction: column !important;
-  align-items: center !important; gap: 8px !important;
-  padding: 20px !important; font-size: 12px !important;
-  color: rgba(255,255,255,0.4) !important;
+  display:        flex   !important;
+  flex-direction: column !important;
+  align-items:    center !important;
+  gap:            8px    !important;
+  padding:        20px   !important;
+  font-size:      12px   !important;
+  color:          rgba(255,255,255,0.4) !important;
 }
 
 /* ════════════════════════════
@@ -349,13 +372,16 @@
    14. 기타
 ════════════════════════════ */
 .android #toast {
-  bottom: calc(var(--bh) + var(--tab-h) + 10px + var(--sab)) !important;
+  bottom: calc(var(--bh) + var(--tab-total) + 10px) !important;
 }
 .android #pl-ctx-menu {
-  position:  fixed !important; left: 50% !important;
+  position:  fixed !important;
+  left:      50%   !important;
   transform: translateX(-50%) !important;
-  bottom:    calc(var(--bh) + var(--tab-h) + 12px) !important;
-  top:       auto !important; min-width: 220px; max-width: 88vw;
+  bottom:    calc(var(--bh) + var(--tab-total) + 12px) !important;
+  top:       auto  !important;
+  min-width: 220px;
+  max-width: 88vw;
 }
 .android button, .android .nb,
 .android .lcard,  .android .fi {
