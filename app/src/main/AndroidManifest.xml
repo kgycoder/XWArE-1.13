@@ -7,7 +7,6 @@
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
-    <!-- ★ 배터리 최적화 권한 복구 — 없으면 SecurityException 즉시 크래시 -->
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
 
     <application
@@ -35,6 +34,7 @@
             </intent-filter>
         </activity>
 
+        <!-- foregroundServiceType 제거 — targetSdk 33에서는 불필요 -->
         <service
             android:name=".MusicKeepAliveService"
             android:exported="false" />
