@@ -10,14 +10,13 @@ html.android {
   --sab:       env(safe-area-inset-bottom, 0px);
   --tab-h:     56px;
   --tab-total: calc(var(--tab-h) + var(--sab));
-  /* ★ 108px: 2행이 잘리지 않는 최소 높이 */
   --bh:        108px;
 }
 
 /* ════════════════════════════
    2. 폰트
-   ★ sans-serif + font-weight: 900
-   ★ -webkit-text-stroke 로 영어도 굵게 강제
+   ★ sans-serif-medium = Android 굵은 고딕
+   ★ 영어·한국어 동일 굵기 보장
 ════════════════════════════ */
 html.android,
 html.android * {
@@ -86,8 +85,7 @@ html.android .view > div:first-child {
 
 /* ════════════════════════════
    7. Bottom Bar (하단 플레이어)
-   ★ --bh 108px에 맞춘 레이아웃
-   ★ padding-top 8px로 상단 잘림 해결
+   ★ padding-top 8px: 상단 잘림 방지
 ════════════════════════════ */
 html.android #bar {
   grid-area:             bar                              !important;
@@ -95,7 +93,6 @@ html.android #bar {
   flex-direction:        column                           !important;
   justify-content:       center                           !important;
   align-items:           stretch                          !important;
-  /* ★ 상단 패딩 8px: 상단 잘림 방지 */
   padding:               8px 12px 6px                    !important;
   gap:                   5px                              !important;
   grid-template-columns: none                             !important;
@@ -131,10 +128,10 @@ html.android .bt-m {
   min-width: 0 !important;
 }
 html.android .bt-title {
-  font-size:     12.5px  !important;
-  font-weight:   700     !important;
-  white-space:   nowrap  !important;
-  overflow:      hidden  !important;
+  font-size:     12.5px   !important;
+  font-weight:   700      !important;
+  white-space:   nowrap   !important;
+  overflow:      hidden   !important;
   text-overflow: ellipsis !important;
 }
 html.android .bt-ch    { font-size: 10px !important; }
@@ -154,11 +151,8 @@ html.android .bc {
   flex:           0 0 auto !important;
 }
 html.android #cb-sh,
-html.android #cb-rep { display: none !important; }
-html.android .bc-row {
-  gap:         20px   !important;
-  align-items: center !important;
-}
+html.android #cb-rep  { display: none !important; }
+html.android .bc-row  { gap: 20px !important; align-items: center !important; }
 html.android .cb      { min-width: 36px !important; min-height: 36px !important; }
 html.android .cb-play { width: 40px     !important; height: 40px      !important; }
 html.android .pb-row  { width: 100%     !important; gap: 6px           !important; }
@@ -198,13 +192,13 @@ html.android .nav-sec {
   height:          var(--tab-h)     !important;
 }
 html.android #side::after {
-  content:    ''                 ;
-  display:    block               !important;
-  width:      100%                !important;
-  height:     var(--sab)          !important;
-  min-height: var(--sab)          !important;
-  background: rgba(4,4,12,0.98)   !important;
-  flex-shrink: 0                  !important;
+  content:     ''                 ;
+  display:     block               !important;
+  width:       100%                !important;
+  height:      var(--sab)          !important;
+  min-height:  var(--sab)          !important;
+  background:  rgba(4,4,12,0.98)   !important;
+  flex-shrink: 0                   !important;
 }
 html.android .nb {
   flex:            1 1 0px      !important;
@@ -224,11 +218,18 @@ html.android .nb {
   position:        relative     !important;
 }
 html.android .nb::before { display: none !important; }
-html.android .nb.on { color: var(--acc) !important; background: transparent !important; }
+html.android .nb.on {
+  color:      var(--acc)  !important;
+  background: transparent !important;
+}
 html.android .nb.on::after {
-  content: ''; position: absolute;
-  top: 0; left: 20%; right: 20%;
-  height: 2px; background: var(--acc);
+  content:       '';
+  position:      absolute;
+  top:           0;
+  left:          20%;
+  right:         20%;
+  height:        2px;
+  background:    var(--acc);
   border-radius: 0 0 3px 3px;
 }
 html.android .nb .ni { width: 22px !important; height: 22px !important; }
@@ -307,26 +308,32 @@ html.android .np-art-area.has-lyrics .np-art-shell {
 }
 
 /* ════════════════════════════
-   12. 가사
-   ★ font-weight: 900
-   ★ -webkit-text-stroke 로 영어도 굵게 강제
+   12. 가사 — Apple Music 스타일
+   ★ sans-serif-medium / sans-serif-black
+     = Android 전용 굵은 시스템 폰트
+     영어·한국어 동일하게 굵게 표시됨
 ════════════════════════════ */
 html.android .np-art-area:not(.has-lyrics) .np-lyrics-panel {
   display: none !important;
 }
 html.android .np-lyrics-panel {
-  flex: 1 !important; min-height: 0 !important;
-  width: 100% !important; max-width: 100% !important;
-  position: relative !important;
-  display: flex !important; flex-direction: column !important;
+  flex:           1        !important;
+  min-height:     0        !important;
+  width:          100%     !important;
+  max-width:      100%     !important;
+  position:       relative !important;
+  display:        flex     !important;
+  flex-direction: column   !important;
 }
 html.android .np-lyrics-scroll {
-  flex: 1 !important; min-height: 0 !important;
-  max-height: 240px !important;
-  overflow-y: auto !important; overflow-x: hidden !important;
+  flex:               1             !important;
+  min-height:         0             !important;
+  max-height:         240px         !important;
+  overflow-y:         auto          !important;
+  overflow-x:         hidden        !important;
   -webkit-overflow-scrolling: touch !important;
-  scrollbar-width: none !important;
-  padding: 40px 20px !important;
+  scrollbar-width:    none          !important;
+  padding:            40px 20px     !important;
   mask-image: linear-gradient(
     to bottom, transparent 0%, black 18%, black 82%, transparent 100%
   ) !important;
@@ -336,65 +343,73 @@ html.android .np-lyrics-scroll {
 }
 html.android .np-lyrics-scroll::-webkit-scrollbar { display: none !important; }
 html.android .np-lyrics-inner {
-  display: flex !important; flex-direction: column !important;
-  align-items: center !important; gap: 0 !important;
+  display:        flex   !important;
+  flex-direction: column !important;
+  align-items:    center !important;
+  gap:            0      !important;
 }
 
-/* ★ 기본 가사 줄: sans-serif + 900 + text-stroke로 영어 굵기 강제 */
+/* ★ 기본 가사: sans-serif-medium (Android 굵은 고딕, 영어·한국어 동일) */
 html.android .np-lyric-line {
-  display:              block                   !important;
-  font-family:          sans-serif              !important;
-  text-align:           center                  !important;
-  width:                100%                    !important;
-  padding:              6px 16px                !important;
-  font-size:            14px                    !important;
-  font-weight:          900                     !important;
-  font-style:           normal                  !important;
-  color:                rgba(255,255,255,0.20)  !important;
-  /* ★ 영어 굵기 강제: 테두리를 같은 색으로 */
-  -webkit-text-stroke:  0.4px rgba(255,255,255,0.20) !important;
-  transform:            none                    !important;
-  cursor:               pointer                 !important;
-  transition:           color .3s ease, font-size .3s ease !important;
-  line-height:          1.5                     !important;
-  word-break:           keep-all               !important;
-  overflow-wrap:        break-word             !important;
+  display:       block                               !important;
+  font-family:   sans-serif-medium, sans-serif       !important;
+  text-align:    center                              !important;
+  width:         100%                                !important;
+  padding:       6px 16px                            !important;
+  font-size:     14px                                !important;
+  font-weight:   500                                 !important;
+  font-style:    normal                              !important;
+  color:         rgba(255,255,255,0.20)              !important;
+  transform:     none                                !important;
+  cursor:        pointer                             !important;
+  transition:    color .3s ease, font-size .3s ease  !important;
+  line-height:   1.5                                 !important;
+  word-break:    keep-all                            !important;
+  overflow-wrap: break-word                          !important;
 }
+
+/* 이전 줄 */
 html.android .np-lyric-line.prev {
-  font-family:          sans-serif              !important;
-  font-size:            15px                    !important;
-  font-weight:          900                     !important;
-  color:                rgba(255,255,255,0.52)  !important;
-  -webkit-text-stroke:  0.4px rgba(255,255,255,0.52) !important;
+  font-family: sans-serif-medium, sans-serif !important;
+  font-size:   15px                          !important;
+  font-weight: 500                           !important;
+  color:       rgba(255,255,255,0.52)        !important;
 }
+
+/* ★ 현재 줄: sans-serif-black = 가장 굵은 시스템 고딕 */
 html.android .np-lyric-line.active {
-  font-family:          sans-serif                 !important;
-  font-size:            clamp(20px, 5.2vw, 25px)  !important;
-  font-weight:          900                        !important;
-  color:                rgba(255,255,255,0.97)     !important;
-  /* ★ active 줄: 더 두껍게 */
-  -webkit-text-stroke:  0.6px rgba(255,255,255,0.97) !important;
+  font-family: sans-serif-black, sans-serif       !important;
+  font-size:   clamp(20px, 5.2vw, 25px)           !important;
+  font-weight: 900                                !important;
+  color:       rgba(255,255,255,0.97)             !important;
   text-shadow:
     0 0 20px rgba(255,255,255,0.22),
     0 2px 10px rgba(0,0,0,0.65)                   !important;
 }
+
+/* 다음 줄 */
 html.android .np-lyric-line.near {
-  font-family:          sans-serif              !important;
-  font-size:            14px                    !important;
-  font-weight:          900                     !important;
-  color:                rgba(255,255,255,0.36)  !important;
-  -webkit-text-stroke:  0.4px rgba(255,255,255,0.36) !important;
+  font-family: sans-serif-medium, sans-serif !important;
+  font-size:   14px                          !important;
+  font-weight: 500                           !important;
+  color:       rgba(255,255,255,0.36)        !important;
 }
+
 html.android #np-no-lyrics,
 html.android .np-no-lyrics {
-  font-size:  13px !important; text-align: center !important;
-  color:      rgba(255,255,255,0.3) !important; padding: 20px !important;
+  font-size:  13px                   !important;
+  text-align: center                 !important;
+  color:      rgba(255,255,255,0.3)  !important;
+  padding:    20px                   !important;
 }
 html.android .np-lyrics-loading {
-  display: flex !important; flex-direction: column !important;
-  align-items: center !important; gap: 8px !important;
-  padding: 20px !important; font-size: 12px !important;
-  color: rgba(255,255,255,0.4) !important;
+  display:        flex                  !important;
+  flex-direction: column                !important;
+  align-items:    center                !important;
+  gap:            8px                   !important;
+  padding:        20px                  !important;
+  font-size:      12px                  !important;
+  color:          rgba(255,255,255,0.4) !important;
 }
 
 /* ════════════════════════════
@@ -409,7 +424,7 @@ html.android #np-overlay-btn { display: inline-flex !important; }
 html.android #bt-overlay-btn  { display: inline-flex !important; }
 html.android #np-title {
   font-size:   clamp(15px, 4.5vw, 20px) !important;
-  font-weight: 700 !important;
+  font-weight: 700                       !important;
 }
 html.android #np-ch    { font-size: clamp(11px, 3vw, 14px) !important; }
 html.android .nc       { min-width: 44px !important; min-height: 44px !important; }
@@ -422,10 +437,13 @@ html.android #toast {
   bottom: calc(var(--bh) + var(--tab-total) + 10px) !important;
 }
 html.android #pl-ctx-menu {
-  position:  fixed !important; left: 50% !important;
-  transform: translateX(-50%) !important;
+  position:  fixed                                     !important;
+  left:      50%                                       !important;
+  transform: translateX(-50%)                          !important;
   bottom:    calc(var(--bh) + var(--tab-total) + 12px) !important;
-  top:       auto !important; min-width: 220px; max-width: 88vw;
+  top:       auto                                      !important;
+  min-width: 220px;
+  max-width: 88vw;
 }
 html.android button,
 html.android .nb,
