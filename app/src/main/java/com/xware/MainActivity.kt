@@ -32,8 +32,7 @@ class MainActivity : AppCompatActivity() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private val OVERLAY_PERMISSION_REQUEST = 1001
 
-    // ★ 핵심: 오버레이 활성 상태 추적
-    // false 상태에서 LyricsOverlayService 를 절대 건드리지 않음
+    // 오버레이 활성 상태 추적 — false 일 때 LyricsOverlayService 호출 차단
     private var isOverlayActive = false
 
     private val overlayControlReceiver = object : BroadcastReceiver() {
@@ -50,10 +49,7 @@ class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // ★ 크래시 로그 저장 핸들러
-        // 크래시 발생 시 다음 실행 때 AlertDialog 로 원인 표시
         setupCrashReporter()
-
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         setupFullscreen()
 
@@ -62,7 +58,6 @@ class MainActivity : AppCompatActivity() {
         root.addView(webView, FrameLayout.LayoutParams(-1, -1))
         setContentView(root)
 
-        // 이전 크래시 로그가 있으면 표시
         showPreviousCrashIfAny()
 
         assetLoader = WebViewAssetLoader.Builder()
@@ -148,8 +143,8 @@ class MainActivity : AppCompatActivity() {
         val prefs = getSharedPreferences("xware_crash", Context.MODE_PRIVATE)
         val log   = prefs.getString("log", null) ?: return
         prefs.edit().remove("log").apply()
-        android.app.AlertDialog.Builder(this)
-            .setTitle("크래시 로그 (개발자용)")
+        AlertDialog.Builder(this)
+            .setTitle("크래시 로그")
             .setMessage(log)
             .setPositiveButton("확인", null)
             .show()
@@ -181,14 +176,11 @@ class MainActivity : AppCompatActivity() {
             defaultTextEncodingName         = "UTF-8"
         }
 
-        // ★ LAYER_TYPE_HARDWARE 제거 — Samsung Galaxy GPU 충돌 방지
         webView.setLayerType(View.LAYER_TYPE_NONE, null)
 
-        // ★ WebView 렌더러 우선순위 높임 — OOM kill 방지
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             webView.setRendererPriorityPolicy(
-                WebView.RENDERER_PRIORITY_IMPORTANT,
-                false  // 백그라운드에서도 우선순위 유지
+                WebView.RENDERER_PRIORITY_IMPORTANT, false
             )
         }
 
@@ -252,13 +244,11 @@ class MainActivity : AppCompatActivity() {
                 """.trimIndent(), null)
             }
 
-            // ★ WebView 렌더러 크래시 복구 — true 반환으로 앱 종료 방지
             override fun onRenderProcessGone(
-                view: WebView?,
-                detail: RenderProcessGoneDetail?
+                view: WebView?, detail: RenderProcessGoneDetail?
             ): Boolean {
                 dlog("WebView 렌더러 종료 (crashed=${detail?.didCrash()})", "W")
-                return true  // 앱을 살린 상태로 유지
+                return true
             }
 
             override fun onReceivedError(
@@ -321,7 +311,7 @@ class MainActivity : AppCompatActivity() {
         if (active) {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M &&
                 !Settings.canDrawOverlays(this)) {
-                isOverlayActive = false  // 권한 없으면 비활성 유지
+                isOverlayActive = false
                 Toast.makeText(
                     this,
                     "설정 → 앱 → X-WARE → '다른 앱 위에 표시' 허용 후 다시 시도하세요",
@@ -365,19 +355,20 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    // ★ startService() 사용 — startForegroundService() 사용 금지
+    //   LyricsOverlayService 는 startForeground() 없으므로
+    //   startForegroundService() 호출 시 Android 14 크래시
     private fun startLyricsOverlay() {
-        val i = Intent(this, LyricsOverlayService::class.java)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) startForegroundService(i)
-        else startService(i)
+        startService(Intent(this, LyricsOverlayService::class.java))
     }
 
-    private fun stopLyricsOverlay() =
+    private fun stopLyricsOverlay() {
+        isOverlayActive = false
         stopService(Intent(this, LyricsOverlayService::class.java))
+    }
 
-    // ★ 핵심 수정: isOverlayActive 가 false 면 LyricsOverlayService 절대 호출 안 함
-    //   오버레이 비활성 상태에서 startService() 호출 →
-    //   LyricsOverlayService.onCreate() → startForeground() →
-    //   MissingForegroundServiceTypeException (Android 14 크래시) 방지
+    // ★ isOverlayActive 가 false 면 즉시 return
+    //   비활성 상태에서 startService() 호출 방지
     fun syncPlayStateToOverlay(playing: Boolean) {
         if (!isOverlayActive) return
         LyricsOverlayService.updatePlayState(this, playing)
