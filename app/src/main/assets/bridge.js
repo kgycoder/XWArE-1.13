@@ -1,5 +1,5 @@
 /**
- * XWare Android Bridge v3.1
+ * XWare Android Bridge v3.2
  */
 (function () {
   'use strict';
@@ -32,7 +32,7 @@
       window._lastMouseEvt = { clientX: e.touches[0].clientX, clientY: e.touches[0].clientY };
   }, { passive: true });
 
-  /* ── 뒤로가기 ────────────────────────────────────── */
+  /* ── 뒤로가기 ─────────────────────────────────── */
   window.xwareHandleBack = function () {
     var np = document.getElementById('np');
     if (np && np.classList.contains('on')) {
@@ -48,41 +48,71 @@
     return false;
   };
 
-  /* ════ app.js 로드 후 초기화 ════════════════════ */
-  window.addEventListener('load', function () {
-
-    /* ── ★ 핵심: Page Visibility API 오버라이드 ──────
-       YouTube IFrame은 document.visibilityState 를 감지해서
-       앱이 백그라운드로 가면 자동으로 영상을 일시정지함.
-       항상 'visible'을 반환하도록 오버라이드해서 방지.
-    ─────────────────────────────────────────────── */
+  /* ════ 핵심: Page Visibility 완전 차단 ═══════════
+     YouTube IFrame은 visibilityState를 감지해 백그라운드에서
+     자동으로 영상을 일시정지함.
+     메인 document + 모든 iframe 에 동시에 적용해야 함.
+  ═══════════════════════════════════════════════ */
+  function overrideVisibility(doc) {
     try {
-      Object.defineProperty(document, 'hidden', {
+      Object.defineProperty(doc, 'hidden', {
         get: function() { return false; },
         configurable: true
       });
-      Object.defineProperty(document, 'visibilityState', {
+      Object.defineProperty(doc, 'visibilityState', {
         get: function() { return 'visible'; },
         configurable: true
       });
-      // visibilitychange 이벤트 발생 자체를 막음
-      var _origAddEventListener = document.addEventListener.bind(document);
-      document.addEventListener = function(type, listener, options) {
-        if (type === 'visibilitychange') {
-          console.log('[Bridge] visibilitychange 이벤트 차단');
-          return;
-        }
-        return _origAddEventListener(type, listener, options);
+      // visibilitychange 이벤트 리스너 등록 자체를 막음
+      var _orig = doc.addEventListener.bind(doc);
+      doc.addEventListener = function(type, fn, opts) {
+        if (type === 'visibilitychange') return;
+        return _orig(type, fn, opts);
       };
-      console.log('[Bridge] Page Visibility API 오버라이드 완료');
-    } catch(e) {
-      console.warn('[Bridge] Visibility 오버라이드 실패: ' + e);
-    }
+    } catch(e) {}
+  }
+
+  // 메인 document에 즉시 적용
+  overrideVisibility(document);
+
+  // ★ YouTube IFrame이 나중에 추가될 때도 적용
+  // MutationObserver로 iframe 감지 → 로드 후 override 주입
+  var iframeObserver = new MutationObserver(function(mutations) {
+    mutations.forEach(function(m) {
+      m.addedNodes.forEach(function(node) {
+        if (node.tagName === 'IFRAME') {
+          node.addEventListener('load', function() {
+            try {
+              overrideVisibility(node.contentDocument);
+            } catch(e) {}
+          });
+        }
+      });
+    });
+  });
+  iframeObserver.observe(document.body || document.documentElement,
+    { childList: true, subtree: true });
+
+  // ★ pagehide / freeze 이벤트도 차단 (Samsung One UI 추가 절전)
+  window.addEventListener('pagehide', function(e) {
+    e.stopImmediatePropagation();
+  }, true);
+  window.addEventListener('freeze', function(e) {
+    e.stopImmediatePropagation();
+  }, true);
+  document.addEventListener('pause', function(e) {
+    e.stopImmediatePropagation();
+  }, true);
+
+  /* ════ app.js 로드 후 초기화 ════════════════════ */
+  window.addEventListener('load', function () {
 
     /* ── 비트 이펙트 비활성화 ────────────────────── */
     if (typeof BG !== 'undefined') {
       try {
-        Object.defineProperty(BG, 'beat', { get: function(){ return 0; }, set: function(){} });
+        Object.defineProperty(BG, 'beat', {
+          get: function(){ return 0; }, set: function(){}
+        });
         BG.orbs = []; BG.energyLevel = 0; BG.tEnergyLevel = 0;
       } catch(e) { try { BG.beat = 0; } catch(_) {} }
     }
@@ -97,15 +127,17 @@
     var _androidOverlayOn = false;
     window.toggleOverlay = function() {
       _androidOverlayOn = !_androidOverlayOn;
-      document.getElementById('bt-overlay-btn')?.classList.toggle('on', _androidOverlayOn);
-      document.getElementById('np-overlay-btn')?.classList.toggle('on', _androidOverlayOn);
+      document.getElementById('bt-overlay-btn')
+        ?.classList.toggle('on', _androidOverlayOn);
+      document.getElementById('np-overlay-btn')
+        ?.classList.toggle('on', _androidOverlayOn);
       try {
         window.chrome.webview.postMessage(JSON.stringify({
           type: 'overlayMode', active: _androidOverlayOn
         }));
       } catch(e) {}
       if (typeof toast === 'function')
-        toast(_androidOverlayOn ? '🫧 오버레이 켜짐' : '오버레이 꺼짐');
+        toast(_androidOverlayOn ? '오버레이 켜짐' : '오버레이 꺼짐');
     };
 
     /* ── 재생 상태 동기화 ────────────────────────── */
@@ -138,7 +170,7 @@
       };
     }
 
-    console.log('[Bridge] Android 초기화 완료 | origin=' + location.origin);
+    console.log('[Bridge] 초기화 완료 | origin=' + location.origin);
   });
 
 })();
