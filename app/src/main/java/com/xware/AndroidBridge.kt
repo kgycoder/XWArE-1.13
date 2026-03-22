@@ -71,14 +71,15 @@ class AndroidBridge(
                             activityRef.get()?.updateOverlayLyrics(prev, active, next1)
                         }
                     }
-                    "setTitle" -> {
-                        val title = msg.optString("title", "X-WARE")
-                        withContext(Dispatchers.Main) {
-                            activityRef.get()?.updateNotificationTitle(title)
-                            // 오버레이 버블 타이틀도 동기화
-                            activityRef.get()?.syncTrackToOverlay(title, "")
-                        }
-                    }
+"setTitle" -> {
+    val title = msg.optString("title", "X-WARE")
+    withContext(Dispatchers.Main) {
+        activityRef.get()?.updateNotificationTitle(title)
+        // ★ syncTrackToOverlay 제거
+        // updateNotificationTitle 에서는 오버레이 동기화 안 함
+        // → isOverlayActive 가 true 일 때만 bridge.js 의 trackChanged 로 처리됨
+    }
+}
                     // bridge.js 에서 updPlay 인터셉트 → 재생상태 → 버블 아이콘 동기화
                     "playState" -> {
                         val playing = msg.optBoolean("playing", false)
