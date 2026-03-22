@@ -31,8 +31,6 @@ class MainActivity : AppCompatActivity() {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private val OVERLAY_PERMISSION_REQUEST = 1001
-
-    // 오버레이 활성 상태 추적 — false 일 때 LyricsOverlayService 호출 차단
     private var isOverlayActive = false
 
     private val overlayControlReceiver = object : BroadcastReceiver() {
@@ -42,9 +40,6 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    // ════════════════════════════════════════════
-    //  생명주기
-    // ════════════════════════════════════════════
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -93,12 +88,15 @@ class MainActivity : AppCompatActivity() {
 
     override fun onPause() {
         super.onPause()
-        webView.resumeTimers()
+        // ★ 핵심: onPause 에서 아무것도 하지 않음
+        // webView.onPause() 호출 시 Samsung WebView 렌더러가
+        // 즉시 미디어 스트림을 중단시킴
     }
 
     override fun onStop() {
         super.onStop()
-        webView.resumeTimers()
+        // ★ 핵심: onStop 에서도 webView 건드리지 않음
+        // resumeTimers() 도 불필요 — onPause 에서 pause 하지 않았으므로
     }
 
     override fun onDestroy() {
@@ -176,11 +174,15 @@ class MainActivity : AppCompatActivity() {
             defaultTextEncodingName         = "UTF-8"
         }
 
+        // ★ 하드웨어 가속은 기본값(NONE) 유지
+        // LAYER_TYPE_HARDWARE 는 Samsung WebView 에서 미디어 재생 충돌 유발
         webView.setLayerType(View.LAYER_TYPE_NONE, null)
 
+        // ★ 렌더러 우선순위: 백그라운드에서도 IMPORTANT 유지
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             webView.setRendererPriorityPolicy(
-                WebView.RENDERER_PRIORITY_IMPORTANT, false
+                WebView.RENDERER_PRIORITY_IMPORTANT,
+                false  // 백그라운드에서도 우선순위 낮추지 않음
             )
         }
 
@@ -228,7 +230,6 @@ class MainActivity : AppCompatActivity() {
                 val uri = request?.url ?: return null
                 return assetLoader.shouldInterceptRequest(uri)
             }
-
             override fun onPageFinished(view: WebView?, url: String?) {
                 super.onPageFinished(view, url)
                 dlog("로딩완료: $url")
@@ -243,14 +244,12 @@ class MainActivity : AppCompatActivity() {
                     })();
                 """.trimIndent(), null)
             }
-
             override fun onRenderProcessGone(
                 view: WebView?, detail: RenderProcessGoneDetail?
             ): Boolean {
                 dlog("WebView 렌더러 종료 (crashed=${detail?.didCrash()})", "W")
                 return true
             }
-
             override fun onReceivedError(
                 view: WebView?, request: WebResourceRequest?, error: WebResourceError?
             ) {
@@ -259,14 +258,12 @@ class MainActivity : AppCompatActivity() {
                     if (url.contains(ASSET_HOST)) dlog("Asset오류: $url", "E")
                 }
             }
-
             override fun onReceivedSslError(
                 view: WebView?, handler: SslErrorHandler?,
                 err: android.net.http.SslError?
             ) {
                 handler?.proceed()
             }
-
             override fun shouldOverrideUrlLoading(
                 view: WebView?, request: WebResourceRequest?
             ): Boolean {
@@ -355,9 +352,6 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    // ★ startService() 사용 — startForegroundService() 사용 금지
-    //   LyricsOverlayService 는 startForeground() 없으므로
-    //   startForegroundService() 호출 시 Android 14 크래시
     private fun startLyricsOverlay() {
         startService(Intent(this, LyricsOverlayService::class.java))
     }
@@ -367,8 +361,6 @@ class MainActivity : AppCompatActivity() {
         stopService(Intent(this, LyricsOverlayService::class.java))
     }
 
-    // ★ isOverlayActive 가 false 면 즉시 return
-    //   비활성 상태에서 startService() 호출 방지
     fun syncPlayStateToOverlay(playing: Boolean) {
         if (!isOverlayActive) return
         LyricsOverlayService.updatePlayState(this, playing)
