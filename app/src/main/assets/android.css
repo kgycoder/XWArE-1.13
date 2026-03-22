@@ -222,20 +222,22 @@
 
 /* ════════════════════════════
    10. PiP (YouTube 플레이어)
-   ★ 크래시 방지: 1px 금지
-   원본 크기 유지 + 화면 밖 이동
+   ★ visibility:hidden 금지
+     → YouTube IFrame 렌더링 거부 → 재생 즉시 크래시
+   화면 밖으로 이동만 하고 완전히 렌더링 유지
 ════════════════════════════ */
 .android #pip {
-  position:       fixed           !important;
-  top:            -9999px         !important;
-  left:           -9999px         !important;
-  width:          296px           !important;  /* 원본 크기 유지 필수 */
-  height:         166px           !important;  /* 1px 하면 YouTube 크래시 */
-  overflow:       visible         !important;
-  opacity:        0               !important;
-  pointer-events: none            !important;
-  visibility:     hidden          !important;
+  position:       fixed    !important;
+  top:            -9999px  !important;
+  left:           -9999px  !important;
+  width:          296px    !important;
+  height:         166px    !important;
+  overflow:       visible  !important;
+  opacity:        1        !important;
+  pointer-events: none     !important;
+  /* visibility, display 절대 건드리지 않음 */
 }
+
 
 /* ════════════════════════════
    11. NOW PLAYING
