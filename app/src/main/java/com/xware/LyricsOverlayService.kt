@@ -148,7 +148,7 @@ class LyricsOverlayService : Service() {
             PixelFormat.TRANSLUCENT
         ).apply {
             gravity = Gravity.TOP or Gravity.START
-            x = screenW - bubSizePx - dp(16)
+            x = dp(16)          // ★ 우측(screenW - bubSz - dp(16)) → 좌측(dp(16))
             y = screenH / 3
         }
 
