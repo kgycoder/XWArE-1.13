@@ -4,8 +4,8 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
-    <!-- ★ targetSdk 34: mediaPlayback 타입 권한 필수 -->
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
+    <!-- ★ mediaPlayback → dataSync 교체: 삼성 Android 14 MediaSession 충돌 방지 -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
@@ -36,13 +36,12 @@
             </intent-filter>
         </activity>
 
-        <!-- ★ targetSdk 34 필수: foregroundServiceType 명시 -->
+        <!-- ★ dataSync 타입: MediaSession 없이도 Android 14에서 안전하게 동작 -->
         <service
             android:name=".MusicKeepAliveService"
-            android:foregroundServiceType="mediaPlayback"
+            android:foregroundServiceType="dataSync"
             android:exported="false" />
 
-        <!-- LyricsOverlayService: foreground 없이 일반 서비스로 실행 -->
         <service
             android:name=".LyricsOverlayService"
             android:exported="false" />
