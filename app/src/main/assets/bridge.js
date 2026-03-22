@@ -1,5 +1,5 @@
 /**
- * XWare Android Bridge v3.8
+ * XWare Android Bridge v3.9
  */
 (function () {
   'use strict';
@@ -10,9 +10,7 @@
   if (!window.chrome)         window.chrome         = {};
   if (!window.chrome.webview) window.chrome.webview = {
     postMessage: function (msg) {
-      try {
-        if (window.AndroidBridge) window.AndroidBridge.postMessage(msg);
-      } catch (e) {}
+      try { if (window.AndroidBridge) window.AndroidBridge.postMessage(msg); } catch (e) {}
     }
   };
 
@@ -22,33 +20,45 @@
   document.documentElement.style.setProperty('--sat', 'env(safe-area-inset-top,0px)');
   document.documentElement.style.setProperty('--sab', 'env(safe-area-inset-bottom,0px)');
 
-  /* ★ tap highlight 전역 제거 + 카드 버튼 스타일 */
+  /* ★ tap highlight 전역 제거 */
   (function () {
     var s = document.createElement('style');
-    s.textContent = [
-      '* { -webkit-tap-highlight-color: transparent !important; outline: none !important; }',
-      /* 카드 플레이리스트 추가 버튼 */
-      '.xw-card-pl-btn {',
-      '  position:absolute !important; bottom:7px !important; left:7px !important;',
-      '  width:26px !important; height:26px !important; border-radius:50% !important;',
-      '  background:rgba(0,0,0,0.62) !important;',
-      '  border:1px solid rgba(255,255,255,0.18) !important;',
-      '  display:flex !important; align-items:center !important; justify-content:center !important;',
-      '  color:rgba(255,255,255,0.88) !important; cursor:pointer !important;',
-      '  opacity:1 !important; z-index:3 !important;',
-      '  -webkit-tap-highlight-color:transparent !important;',
-      '}',
-      '.xw-card-pl-btn:active { background:rgba(250,45,90,0.55) !important; }'
-    ].join('\n');
+    s.textContent = '* { -webkit-tap-highlight-color: transparent !important; outline: none !important; }';
     var head = document.head || document.documentElement;
     head.appendChild(s);
   })();
 
+  /* ════════════════════════════════════════════════
+     ★ localStorage.setItem 조기 후킹
+     앱이 플레이리스트를 저장할 때 키 자동 탐지
+  ════════════════════════════════════════════════ */
+  var _plKey = null;
+  (function () {
+    var _origSetItem = localStorage.setItem.bind(localStorage);
+    localStorage.setItem = function (key, value) {
+      _origSetItem(key, value);
+      if (_plKey) return; // 이미 탐지됨
+      try {
+        var parsed = JSON.parse(value);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          var f = parsed[0];
+          if (f && typeof f === 'object' &&
+              (f.tracks !== undefined || (f.name !== undefined && f.id !== undefined))) {
+            _plKey = key;
+            console.log('[Bridge] 플레이리스트 키 자동 탐지:', key);
+          }
+        }
+      } catch (e) {}
+    };
+  })();
+
+  /* ── 터치 위치 추적 ─────────────────────────── */
   document.addEventListener('touchstart', function (e) {
     if (e.touches && e.touches[0])
       window._lastMouseEvt = { clientX: e.touches[0].clientX, clientY: e.touches[0].clientY };
   }, { passive: true });
 
+  /* ── 뒤로가기 ───────────────────────────────── */
   window.xwareHandleBack = function () {
     if (document.getElementById('xw-pl-modal'))    { _closePlModal();    return true; }
     if (document.getElementById('xw-input-modal')) { _closeInputModal(); return true; }
@@ -83,7 +93,7 @@
   /* ════ app.js 로드 후 초기화 ════════════════════ */
   window.addEventListener('load', function () {
 
-    /* ── bgLoop 완전 정지 ───────────────────────── */
+    /* ── bgLoop 완전 정지 ─────────────────────── */
     if (typeof BG !== 'undefined') {
       try {
         Object.defineProperty(BG, 'beat', { get: function(){ return 0; }, set: function(){} });
@@ -110,18 +120,17 @@
     };
 
     /* ════════════════════════════════════════════
-       플레이리스트 Storage + 앱 동기화
+       플레이리스트 Storage 유틸
     ════════════════════════════════════════════ */
-    var _plKey  = null;
-    var _plGlobalKey = null; /* window의 실제 변수명 */
-
     function _findStorage() {
+      /* localStorage.setItem 후킹으로 이미 탐지된 경우 */
       if (_plKey) {
         try {
           var v = localStorage.getItem(_plKey);
           if (v) return { key: _plKey, data: JSON.parse(v) };
         } catch (e) {}
       }
+      /* 직접 스캔 */
       var cands = ['xw_pl','xw_playlists','playlists','PL','pl_data','xware_pl','xware_playlists'];
       for (var i = 0; i < cands.length; i++) {
         try {
@@ -147,85 +156,61 @@
       return { key: _plKey, data: [] };
     }
 
-    /* ★ 앱 내부 플레이리스트 배열 실시간 탐색 및 동기화 */
-    function _syncGlobalPL(newData) {
-      /* 1차: 알려진 이름으로 빠른 탐색 */
-      var knownNames = ['PL','PLAYLISTS','playlists','pl','PLData','plData','_pl','xwPL','XPL'];
-      for (var i = 0; i < knownNames.length; i++) {
-        var n = knownNames[i];
+    /* ★ 플레이리스트 탭 찾기 */
+    function _findPlNav() {
+      /* data-v 속성 */
+      var el = document.querySelector('[data-v="playlists"], [data-v="pl"]');
+      if (el) return el;
+      /* onclick 속성에 playlists 포함 */
+      var nbs = document.querySelectorAll('.nb');
+      for (var i = 0; i < nbs.length; i++) {
+        var nb = nbs[i];
+        var oc = nb.getAttribute('onclick') || '';
+        var tx = nb.textContent || '';
+        if (oc.indexOf('playlist') !== -1 || oc.indexOf('\'pl\'') !== -1 ||
+            oc.indexOf('"pl"') !== -1 || tx.indexOf('플레이리스트') !== -1) {
+          return nb;
+        }
+      }
+      return null;
+    }
+
+    /* ★ 저장 + 앱 즉시 반영
+       핵심: 플레이리스트 탭을 클릭 → 앱이 localStorage 재로드
+       → 원래 탭으로 복귀 (70ms, 사용자 인식 불가)           */
+    function _savePL(key, data) {
+      var k = key || _plKey || 'xw_pl';
+
+      /* 1. localStorage 저장 (setItem 후킹으로 _plKey 도 자동 갱신됨) */
+      try { localStorage.setItem(k, JSON.stringify(data)); } catch (e) {}
+
+      /* 2. 앱 렌더 함수 직접 호출 시도 */
+      var fns = ['renderPL','plRender','loadPL','refreshPlaylists',
+                 'renderPlaylists','plLoad','initPL','plRefresh','updatePL'];
+      var rendered = false;
+      fns.forEach(function (fn) {
+        if (typeof window[fn] === 'function') {
+          try { window[fn](); rendered = true; } catch (e) {}
+        }
+      });
+
+      /* 3. ★ 렌더 함수 실패 시: 탭 클릭으로 강제 재로드
+            현재 탭 기억 → 플레이리스트 탭 클릭 → 원래 탭 복귀 */
+      if (!rendered) {
         try {
-          var v = window[n];
-          if (Array.isArray(v)) {
-            var s = v[0];
-            if (!s || s.tracks !== undefined || (s.name && s.id)) {
-              /* 찾음: 배열을 제자리에서 교체 */
-              v.splice(0, v.length);
-              newData.forEach(function (p) { v.push(p); });
-              _plGlobalKey = n;
-              return true;
+          var plNav      = _findPlNav();
+          var currentNav = document.querySelector('.nb.on');
+          if (plNav) {
+            var wasOnPl = (plNav === currentNav);
+            plNav.click();
+            if (!wasOnPl && currentNav && currentNav !== plNav) {
+              setTimeout(function () {
+                try { currentNav.click(); } catch (e) {}
+              }, 70);
             }
           }
         } catch (e) {}
       }
-      /* 2차: window 전체 스캔 */
-      try {
-        Object.keys(window).forEach(function (key) {
-          if (_plGlobalKey) return;
-          try {
-            var val = window[key];
-            if (!Array.isArray(val) || val.length === 0) return;
-            var first = val[0];
-            if (!first || typeof first !== 'object') return;
-            if (first.tracks === undefined && !(first.name && first.id)) return;
-            val.splice(0, val.length);
-            newData.forEach(function (p) { val.push(p); });
-            _plGlobalKey = key;
-          } catch (e) {}
-        });
-      } catch (e) {}
-      return !!_plGlobalKey;
-    }
-
-    function _savePL(key, data) {
-      var k = key || _plKey || 'xw_pl';
-
-      /* 1. localStorage 저장 */
-      try { localStorage.setItem(k, JSON.stringify(data)); } catch (e) {}
-
-      /* 2. ★ 앱 내부 배열 직접 동기화 */
-      _syncGlobalPL(data);
-
-      /* 3. StorageEvent dispatch */
-      try {
-        window.dispatchEvent(new StorageEvent('storage', {
-          key: k, newValue: JSON.stringify(data),
-          storageArea: localStorage, url: location.href
-        }));
-      } catch (e) {}
-
-      /* 4. Custom events */
-      ['playlistUpdated','plUpdated','xwPlUpdated'].forEach(function (ev) {
-        try { window.dispatchEvent(new CustomEvent(ev, { detail: { data: data } })); } catch (e) {}
-      });
-
-      /* 5. 앱 렌더 함수 호출 */
-      var renderFns = [
-        'renderPL','plRender','loadPL','refreshPlaylists','renderPlaylists',
-        'plLoad','initPL','plInit','plRefresh','updatePL','drawPL',
-        'refreshPLView','updatePlaylists','reloadPL'
-      ];
-      renderFns.forEach(function (fn) {
-        if (typeof window[fn] === 'function') try { window[fn](); } catch (e) {}
-      });
-
-      /* 6. ★ 현재 플레이리스트 뷰가 열려있으면 강제 전환으로 리렌더 */
-      try {
-        var plView = document.getElementById('v-playlists');
-        if (plView && plView.classList.contains('on')) {
-          var plNav = document.querySelector('[data-v="playlists"], .nb[onclick*="playlist"], .nb[onclick*="pl"]');
-          if (plNav) { plNav.click(); setTimeout(function () { plNav.click(); }, 60); }
-        }
-      } catch (e) {}
     }
 
     function _normTrack(t) {
@@ -316,24 +301,26 @@
         b.textContent = label;
         b.setAttribute('style', [
           'flex:1','padding:13px 0','border-radius:12px',
-          'background:' + bg,'color:' + color,
+          'background:' + bg, 'color:' + color,
           'font-size:14px','font-weight:600',
           'border:none','-webkit-appearance:none',
           'cursor:pointer','font-family:sans-serif',
           '-webkit-tap-highlight-color:transparent'
         ].join(';'));
-        b.addEventListener('touchstart', function () { this.style.opacity = '0.7'; }, { passive: true });
-        b.addEventListener('touchend',   function () { this.style.opacity = '1'; },   { passive: true });
+        b.addEventListener('touchstart', function(){ this.style.opacity='0.7'; }, {passive:true});
+        b.addEventListener('touchend',   function(){ this.style.opacity='1';   }, {passive:true});
         return b;
       }
 
       var cancelBtn  = _mkBtn('취소',   'rgba(255,255,255,0.07)', 'rgba(255,255,255,0.55)');
-      var confirmBtn = _mkBtn('만들기', 'var(--acc,#fa2d5a)',    '#fff');
+      var confirmBtn = _mkBtn('만들기', 'var(--acc,#fa2d5a)',     '#fff');
 
       function _closeInput() {
         dialog.style.transition = 'transform .18s ease-in,opacity .18s';
-        dialog.style.transform = 'scale(0.94)'; dialog.style.opacity = '0';
-        overlay.style.transition = 'opacity .18s'; overlay.style.opacity = '0';
+        dialog.style.transform  = 'scale(0.94)';
+        dialog.style.opacity    = '0';
+        overlay.style.transition = 'opacity .18s';
+        overlay.style.opacity    = '0';
         setTimeout(function () { if (overlay.parentNode) overlay.remove(); }, 200);
       }
       window._closeInputModal = _closeInput;
@@ -364,7 +351,8 @@
       requestAnimationFrame(function () {
         requestAnimationFrame(function () {
           dialog.style.transition = 'transform .22s cubic-bezier(.34,1.4,.64,1),opacity .18s ease';
-          dialog.style.transform = 'scale(1)'; dialog.style.opacity = '1';
+          dialog.style.transform  = 'scale(1)';
+          dialog.style.opacity    = '1';
           setTimeout(function () { input.focus(); }, 80);
         });
       });
@@ -403,39 +391,61 @@
         'transition:transform .28s cubic-bezier(.32,0,.18,1)'
       ].join(';'));
 
+      /* 헤더 */
       var header = document.createElement('div');
-      header.setAttribute('style', 'padding:14px 20px 12px;border-bottom:1px solid rgba(255,255,255,0.07)');
+      header.setAttribute('style',
+        'padding:14px 20px 12px;border-bottom:1px solid rgba(255,255,255,0.07)');
       header.innerHTML =
-        '<div style="width:38px;height:4px;background:rgba(255,255,255,0.18);border-radius:2px;margin:0 auto 14px"></div>' +
-        '<div style="font-size:14px;font-weight:700;color:rgba(255,255,255,0.92);font-family:sans-serif">플레이리스트에 추가</div>' +
-        '<div style="font-size:11px;color:rgba(255,255,255,0.38);margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-family:sans-serif">' +
+        '<div style="width:38px;height:4px;background:rgba(255,255,255,0.18);' +
+        'border-radius:2px;margin:0 auto 14px"></div>' +
+        '<div style="font-size:14px;font-weight:700;color:rgba(255,255,255,0.92);' +
+        'font-family:sans-serif">플레이리스트에 추가</div>' +
+        '<div style="font-size:11px;color:rgba(255,255,255,0.38);margin-top:4px;' +
+        'white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-family:sans-serif">' +
         (track.title || '') + '</div>';
       sheet.appendChild(header);
 
+      /* 기존 플레이리스트 목록 */
       pls.forEach(function (pl) {
         var count = pl.tracks ? pl.tracks.length : 0;
         var item  = document.createElement('div');
         item.setAttribute('style', [
           'display:flex','align-items:center','gap:14px','padding:13px 20px',
           'cursor:pointer','-webkit-tap-highlight-color:transparent',
-          'border-bottom:1px solid rgba(255,255,255,0.04)','transition:background .12s'
+          'border-bottom:1px solid rgba(255,255,255,0.04)',
+          'transition:background .12s'
         ].join(';'));
         item.innerHTML =
-          '<div style="width:44px;height:44px;flex-shrink:0;border-radius:9px;background:rgba(255,255,255,0.07);display:flex;align-items:center;justify-content:center">' +
-            '<svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="rgba(255,255,255,0.55)" stroke-width="1.6" stroke-linecap="round">' +
-              '<line x1="3" y1="5" x2="17" y2="5"/><line x1="3" y1="10" x2="13" y2="10"/><line x1="3" y1="15" x2="10" y2="15"/>' +
-            '</svg></div>' +
-          '<div style="flex:1;min-width:0">' +
-            '<div style="font-size:13.5px;font-weight:600;color:rgba(255,255,255,0.88);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-family:sans-serif">' + (pl.name||'플레이리스트') + '</div>' +
-            '<div style="font-size:11px;color:rgba(255,255,255,0.35);margin-top:2px;font-family:sans-serif">' + count + '곡</div>' +
+          '<div style="width:44px;height:44px;flex-shrink:0;border-radius:9px;' +
+          'background:rgba(255,255,255,0.07);display:flex;align-items:center;justify-content:center">' +
+            '<svg width="20" height="20" viewBox="0 0 20 20" fill="none" ' +
+            'stroke="rgba(255,255,255,0.55)" stroke-width="1.6" stroke-linecap="round">' +
+              '<line x1="3" y1="5" x2="17" y2="5"/>' +
+              '<line x1="3" y1="10" x2="13" y2="10"/>' +
+              '<line x1="3" y1="15" x2="10" y2="15"/>' +
+            '</svg>' +
           '</div>' +
-          '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="rgba(255,255,255,0.2)" stroke-width="1.5" stroke-linecap="round"><polyline points="6,3 11,8 6,13"/></svg>';
-        item.addEventListener('touchstart', function () { this.style.background='rgba(255,255,255,0.06)'; }, {passive:true});
-        item.addEventListener('touchend',   function () { this.style.background=''; }, {passive:true});
+          '<div style="flex:1;min-width:0">' +
+            '<div style="font-size:13.5px;font-weight:600;color:rgba(255,255,255,0.88);' +
+            'white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-family:sans-serif">' +
+            (pl.name || '플레이리스트') + '</div>' +
+            '<div style="font-size:11px;color:rgba(255,255,255,0.35);margin-top:2px;' +
+            'font-family:sans-serif">' + count + '곡</div>' +
+          '</div>' +
+          '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" ' +
+          'stroke="rgba(255,255,255,0.2)" stroke-width="1.5" stroke-linecap="round">' +
+            '<polyline points="6,3 11,8 6,13"/>' +
+          '</svg>';
+
+        item.addEventListener('touchstart',
+          function(){ this.style.background='rgba(255,255,255,0.06)'; }, {passive:true});
+        item.addEventListener('touchend',
+          function(){ this.style.background=''; }, {passive:true});
         item.addEventListener('click', function () {
           var ok = _addToPL(pl, track, st.key);
           _closePlModal();
-          if (ok && typeof toast === 'function') toast('✓ ' + (pl.name||'플레이리스트') + '에 추가됨');
+          if (ok && typeof toast === 'function')
+            toast('✓ ' + (pl.name || '플레이리스트') + '에 추가됨');
         });
         sheet.appendChild(item);
       });
@@ -444,33 +454,51 @@
       var newRow = document.createElement('div');
       newRow.setAttribute('style', [
         'display:flex','align-items:center','gap:14px','padding:14px 20px 10px',
-        'cursor:pointer','-webkit-tap-highlight-color:transparent','transition:background .12s'
+        'cursor:pointer','-webkit-tap-highlight-color:transparent',
+        'transition:background .12s'
       ].join(';'));
       newRow.innerHTML =
-        '<div style="width:44px;height:44px;flex-shrink:0;border-radius:9px;border:1.5px dashed rgba(250,45,90,0.5);display:flex;align-items:center;justify-content:center">' +
-          '<svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="#fa2d5a" stroke-width="2" stroke-linecap="round"><line x1="10" y1="4" x2="10" y2="16"/><line x1="4" y1="10" x2="16" y2="10"/></svg>' +
+        '<div style="width:44px;height:44px;flex-shrink:0;border-radius:9px;' +
+        'border:1.5px dashed rgba(250,45,90,0.5);display:flex;align-items:center;justify-content:center">' +
+          '<svg width="20" height="20" viewBox="0 0 20 20" fill="none" ' +
+          'stroke="#fa2d5a" stroke-width="2" stroke-linecap="round">' +
+            '<line x1="10" y1="4" x2="10" y2="16"/>' +
+            '<line x1="4" y1="10" x2="16" y2="10"/>' +
+          '</svg>' +
         '</div>' +
-        '<div style="font-size:13.5px;font-weight:600;color:#fa2d5a;font-family:sans-serif">새 플레이리스트 만들기</div>';
-      newRow.addEventListener('touchstart', function () { this.style.background='rgba(250,45,90,0.06)'; }, {passive:true});
-      newRow.addEventListener('touchend',   function () { this.style.background=''; }, {passive:true});
+        '<div style="font-size:13.5px;font-weight:600;color:#fa2d5a;' +
+        'font-family:sans-serif">새 플레이리스트 만들기</div>';
+
+      newRow.addEventListener('touchstart',
+        function(){ this.style.background='rgba(250,45,90,0.06)'; }, {passive:true});
+      newRow.addEventListener('touchend',
+        function(){ this.style.background=''; }, {passive:true});
       newRow.addEventListener('click', function () {
         _closePlModal();
         setTimeout(function () {
           _xwPrompt('새 플레이리스트', '플레이리스트 이름', function (name) {
-            var st2 = _findStorage();
-            var newPl = { id:'pl_'+Date.now(), name:name, tracks:[_normTrack(track)], created:Date.now() };
+            var st2   = _findStorage();
+            var newPl = {
+              id:      'pl_' + Date.now(),
+              name:    name,
+              tracks:  [_normTrack(track)],
+              created: Date.now()
+            };
             st2.data.push(newPl);
             _savePL(st2.key, st2.data);
             if (typeof toast === 'function') toast('✓ ' + name + '에 추가됨');
           });
         }, 260);
       });
+
       sheet.appendChild(newRow);
       modal.appendChild(sheet);
       document.body.appendChild(modal);
 
       requestAnimationFrame(function () {
-        requestAnimationFrame(function () { sheet.style.transform = 'translateY(0)'; });
+        requestAnimationFrame(function () {
+          sheet.style.transform = 'translateY(0)';
+        });
       });
       modal.addEventListener('click', function (e) {
         if (e.target === modal) _closePlModal();
@@ -489,97 +517,7 @@
     }
     window._closePlModal = _closePlModal;
 
-    /* ════════════════════════════════════════════
-       ★ 카드 + 버튼 inject
-       YouTube 썸네일 URL → videoId 추출
-       .c-title / .c-ch / img 에서 트랙 정보 추출
-    ════════════════════════════════════════════ */
-    function _getTrackFromCard(card) {
-      /* 1. 데이터 속성 */
-      var id = card.dataset.id || card.dataset.vid || card.dataset.videoId ||
-               card.dataset.ytid || card.dataset.ytId || '';
-
-      /* 2. 썸네일 URL에서 videoId 추출 (가장 신뢰도 높음) */
-      if (!id) {
-        var img = card.querySelector('img');
-        if (img) {
-          var src = img.src || img.dataset.src || '';
-          var m   = src.match(/\/vi\/([a-zA-Z0-9_-]{11})\//);
-          if (m) id = m[1];
-        }
-      }
-
-      var title   = (card.querySelector('.c-title')   || {}).textContent || '';
-      var channel = (card.querySelector('.c-ch')       || {}).textContent || '';
-      var thumb   = '';
-      var imgEl   = card.querySelector('img');
-      if (imgEl) thumb = imgEl.src || imgEl.dataset.src || '';
-
-      title   = title.trim();
-      channel = channel.trim();
-      if (!title) return null;
-
-      return {
-        id:       id || ('xw_' + Date.now()),
-        title:    title,
-        channel:  channel,
-        thumb:    thumb,
-        duration: 0
-      };
-    }
-
-    function _injectCardBtn(card) {
-      if (!card || card.querySelector('.xw-card-pl-btn')) return;
-
-      /* c-img 안에 버튼 삽입 (절대위치 버튼들과 동일 컨테이너) */
-      var cImg = card.querySelector('.c-img') || card;
-
-      var btn = document.createElement('button');
-      btn.className = 'xw-card-pl-btn';
-      btn.title     = '플레이리스트에 추가';
-      btn.innerHTML =
-        '<svg width="13" height="13" viewBox="0 0 13 13" fill="none" ' +
-        'stroke="currentColor" stroke-width="2" stroke-linecap="round">' +
-        '<line x1="6.5" y1="1.5" x2="6.5" y2="11.5"/>' +
-        '<line x1="1.5" y1="6.5" x2="11.5" y2="6.5"/></svg>';
-
-      btn.addEventListener('click', function (e) {
-        e.stopPropagation();
-        e.preventDefault();
-        var track = _getTrackFromCard(card);
-        if (track) {
-          _openPlModal(track);
-        } else {
-          if (typeof toast === 'function') toast('곡 정보를 불러올 수 없어요');
-        }
-      });
-
-      cImg.appendChild(btn);
-    }
-
-    /* 기존 카드에 즉시 적용 */
-    function _injectAllCards() {
-      document.querySelectorAll('.card').forEach(_injectCardBtn);
-    }
-    _injectAllCards();
-
-    /* 새로 추가되는 카드 감지 */
-    var _cardObs = new MutationObserver(function (mutations) {
-      mutations.forEach(function (m) {
-        m.addedNodes.forEach(function (node) {
-          if (node.nodeType !== 1) return;
-          if (node.classList && node.classList.contains('card')) {
-            _injectCardBtn(node);
-          }
-          if (node.querySelectorAll) {
-            node.querySelectorAll('.card').forEach(_injectCardBtn);
-          }
-        });
-      });
-    });
-    _cardObs.observe(document.body, { childList: true, subtree: true });
-
-    /* ── 미니플레이어 + 버튼 inject ───────────────── */
+    /* ── 미니플레이어 + 버튼 inject ─────────────── */
     function injectAddButton() {
       var overlayBtn = document.getElementById('bt-overlay-btn');
       if (!overlayBtn || document.getElementById('bt-addpl-btn')) return;
@@ -604,7 +542,9 @@
       injectAddButton();
     } else {
       var obs = new MutationObserver(function () {
-        if (document.getElementById('bt-overlay-btn')) { injectAddButton(); obs.disconnect(); }
+        if (document.getElementById('bt-overlay-btn')) {
+          injectAddButton(); obs.disconnect();
+        }
       });
       obs.observe(document.body || document.documentElement, { childList: true, subtree: true });
     }
@@ -627,19 +567,26 @@
       }
     }
     var _hookTimer = setInterval(function () {
-      if (window.S && S.ytPlayer && S.ytReady) { _installYTPauseHook(); clearInterval(_hookTimer); }
+      if (window.S && S.ytPlayer && S.ytReady) {
+        _installYTPauseHook(); clearInterval(_hookTimer);
+      }
     }, 500);
 
     /* ── 오버레이 모드 ───────────────────────────── */
     var _androidOverlayOn = false;
     window.toggleOverlay = function () {
       _androidOverlayOn = !_androidOverlayOn;
-      document.getElementById('bt-overlay-btn')?.classList.toggle('on', _androidOverlayOn);
-      document.getElementById('np-overlay-btn')?.classList.toggle('on', _androidOverlayOn);
+      document.getElementById('bt-overlay-btn')
+        ?.classList.toggle('on', _androidOverlayOn);
+      document.getElementById('np-overlay-btn')
+        ?.classList.toggle('on', _androidOverlayOn);
       try {
-        window.chrome.webview.postMessage(JSON.stringify({ type:'overlayMode', active:_androidOverlayOn }));
+        window.chrome.webview.postMessage(JSON.stringify({
+          type: 'overlayMode', active: _androidOverlayOn
+        }));
       } catch (e) {}
-      if (typeof toast === 'function') toast(_androidOverlayOn ? '오버레이 켜짐' : '오버레이 꺼짐');
+      if (typeof toast === 'function')
+        toast(_androidOverlayOn ? '오버레이 켜짐' : '오버레이 꺼짐');
     };
 
     /* ── 재생 상태 동기화 ────────────────────────── */
@@ -649,7 +596,8 @@
         _origUpdPlay.apply(this, arguments);
         try {
           window.chrome.webview.postMessage(JSON.stringify({
-            type:'playState', playing:(typeof S!=='undefined')?!!S.playing:false
+            type:    'playState',
+            playing: (typeof S !== 'undefined') ? !!S.playing : false
           }));
         } catch (e) {}
       };
@@ -662,10 +610,10 @@
         _origPlayTrack.apply(this, arguments);
         try {
           window.chrome.webview.postMessage(JSON.stringify({
-            type:'trackChanged',
-            title:  (t&&t.title)  ?t.title:'',
-            channel:(t&&t.channel)?t.channel:'',
-            thumb:  (t&&t.thumb)  ?t.thumb:''
+            type:    'trackChanged',
+            title:   (t && t.title)   ? t.title   : '',
+            channel: (t && t.channel) ? t.channel : '',
+            thumb:   (t && t.thumb)   ? t.thumb   : ''
           }));
         } catch (e) {}
       };
@@ -673,4 +621,5 @@
 
     console.log('[Bridge] 초기화 완료');
   });
+
 })();
