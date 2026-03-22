@@ -1,5 +1,5 @@
 /*
- * XWare Android CSS v4.5
+ * XWare Android CSS v4.6
  */
 
 /* ════════════════════════════
@@ -10,13 +10,11 @@ html.android {
   --sab:       env(safe-area-inset-bottom, 0px);
   --tab-h:     56px;
   --tab-total: calc(var(--tab-h) + var(--sab));
-  --bh:        108px;
+  --bh:        72px;
 }
 
 /* ════════════════════════════
    2. 폰트
-   ★ sans-serif-medium = Android 굵은 고딕
-   ★ 영어·한국어 동일 굵기 보장
 ════════════════════════════ */
 html.android,
 html.android * {
@@ -84,17 +82,16 @@ html.android .view > div:first-child {
 }
 
 /* ════════════════════════════
-   7. Bottom Bar (하단 플레이어)
-   ★ padding-top 8px: 상단 잘림 방지
+   7. Bottom Bar
+   ★ 심플 1행: 앨범 | 타이틀+아티스트 | 버튼들
 ════════════════════════════ */
 html.android #bar {
   grid-area:             bar                              !important;
   display:               flex                             !important;
-  flex-direction:        column                           !important;
-  justify-content:       center                           !important;
-  align-items:           stretch                          !important;
-  padding:               8px 12px 6px                    !important;
-  gap:                   5px                              !important;
+  flex-direction:        row                              !important;
+  align-items:           center                           !important;
+  padding:               0 12px                           !important;
+  gap:                   0                                !important;
   grid-template-columns: none                             !important;
   height:                var(--bh)                        !important;
   width:                 100vw                            !important;
@@ -102,61 +99,97 @@ html.android #bar {
   box-sizing:            border-box                       !important;
   backdrop-filter:       none                             !important;
   -webkit-backdrop-filter: none                           !important;
-  background:            rgba(6,6,16,0.98)                !important;
-  border-top:            1px solid rgba(255,255,255,0.08) !important;
+  background:            rgba(8,8,18,0.97)                !important;
+  border-top:            1px solid rgba(255,255,255,0.07) !important;
   transition:            none                             !important;
   overflow:              hidden                           !important;
 }
 
-/* 1행: 트랙 정보 */
+/* 트랙 정보 (앨범 + 텍스트) */
 html.android .bt {
   display:     flex     !important;
-  width:       100%     !important;
+  flex:        1        !important;
   min-width:   0        !important;
-  gap:         9px      !important;
+  gap:         11px     !important;
   align-items: center   !important;
-  flex:        0 0 auto !important;
 }
 html.android .bt-art {
-  width:         36px !important;
-  height:        36px !important;
-  border-radius: 7px  !important;
-  flex-shrink:   0    !important;
+  width:         46px   !important;
+  height:        46px   !important;
+  border-radius: 8px    !important;
+  flex-shrink:   0      !important;
+  box-shadow:    0 2px 10px rgba(0,0,0,0.5) !important;
 }
 html.android .bt-m {
   flex:      1 !important;
   min-width: 0 !important;
 }
 html.android .bt-title {
-  font-size:     12.5px   !important;
+  font-size:     13.5px   !important;
   font-weight:   700      !important;
   white-space:   nowrap   !important;
   overflow:      hidden   !important;
   text-overflow: ellipsis !important;
+  margin-bottom: 2px      !important;
 }
-html.android .bt-ch    { font-size: 10px !important; }
+html.android .bt-ch {
+  font-size:     11px                    !important;
+  color:         rgba(255,255,255,0.50)  !important;
+  white-space:   nowrap                  !important;
+  overflow:      hidden                  !important;
+  text-overflow: ellipsis                !important;
+}
+
+/* 우측 버튼들 */
 html.android .bt-fav,
 html.android .bt-overlay-btn,
-html.android #bt-overlay-btn { flex-shrink: 0 !important; }
-html.android .vizz { display: none !important; }
-html.android .be   { display: none !important; }
+html.android #bt-overlay-btn {
+  flex-shrink:     0         !important;
+  width:           36px      !important;
+  height:          36px      !important;
+  display:         flex      !important;
+  align-items:     center    !important;
+  justify-content: center    !important;
+  color:           rgba(255,255,255,0.7) !important;
+}
 
-/* 2행: 컨트롤 + 프로그레스 */
+/* 컨트롤 영역 (이전·재생·다음) */
 html.android .bc {
-  display:        flex     !important;
-  flex-direction: column   !important;
-  align-items:    center   !important;
-  width:          100%     !important;
-  gap:            3px      !important;
+  display:        flex    !important;
+  flex-direction: row     !important;
+  align-items:    center  !important;
+  gap:            0       !important;
   flex:           0 0 auto !important;
 }
+html.android .bc-row {
+  display:     flex   !important;
+  align-items: center !important;
+  gap:         2px    !important;
+}
 html.android #cb-sh,
-html.android #cb-rep  { display: none !important; }
-html.android .bc-row  { gap: 20px !important; align-items: center !important; }
-html.android .cb      { min-width: 36px !important; min-height: 36px !important; }
-html.android .cb-play { width: 40px     !important; height: 40px      !important; }
-html.android .pb-row  { width: 100%     !important; gap: 6px           !important; }
-html.android .pb      { height: 3px !important; }
+html.android #cb-rep { display: none !important; }
+html.android .cb {
+  min-width:  36px                    !important;
+  min-height: 36px                    !important;
+  color:      rgba(255,255,255,0.75)  !important;
+}
+/* 재생/정지 버튼 — 원형 */
+html.android .cb-play {
+  width:           40px                   !important;
+  height:          40px                   !important;
+  border-radius:   50%                    !important;
+  background:      rgba(255,255,255,0.10) !important;
+  display:         flex                   !important;
+  align-items:     center                 !important;
+  justify-content: center                 !important;
+  margin-left:     2px                    !important;
+  flex-shrink:     0                      !important;
+}
+
+/* 숨길 요소 */
+html.android .vizz  { display: none !important; }
+html.android .be    { display: none !important; }
+html.android .pb-row { display: none !important; }
 
 /* ════════════════════════════
    8. 하단 탭바
@@ -309,9 +342,6 @@ html.android .np-art-area.has-lyrics .np-art-shell {
 
 /* ════════════════════════════
    12. 가사 — Apple Music 스타일
-   ★ sans-serif-medium / sans-serif-black
-     = Android 전용 굵은 시스템 폰트
-     영어·한국어 동일하게 굵게 표시됨
 ════════════════════════════ */
 html.android .np-art-area:not(.has-lyrics) .np-lyrics-panel {
   display: none !important;
@@ -348,8 +378,6 @@ html.android .np-lyrics-inner {
   align-items:    center !important;
   gap:            0      !important;
 }
-
-/* ★ 기본 가사: sans-serif-medium (Android 굵은 고딕, 영어·한국어 동일) */
 html.android .np-lyric-line {
   display:       block                               !important;
   font-family:   sans-serif-medium, sans-serif       !important;
@@ -367,16 +395,12 @@ html.android .np-lyric-line {
   word-break:    keep-all                            !important;
   overflow-wrap: break-word                          !important;
 }
-
-/* 이전 줄 */
 html.android .np-lyric-line.prev {
   font-family: sans-serif-medium, sans-serif !important;
   font-size:   15px                          !important;
   font-weight: 500                           !important;
   color:       rgba(255,255,255,0.52)        !important;
 }
-
-/* ★ 현재 줄: sans-serif-black = 가장 굵은 시스템 고딕 */
 html.android .np-lyric-line.active {
   font-family: sans-serif-black, sans-serif       !important;
   font-size:   clamp(20px, 5.2vw, 25px)           !important;
@@ -386,15 +410,12 @@ html.android .np-lyric-line.active {
     0 0 20px rgba(255,255,255,0.22),
     0 2px 10px rgba(0,0,0,0.65)                   !important;
 }
-
-/* 다음 줄 */
 html.android .np-lyric-line.near {
   font-family: sans-serif-medium, sans-serif !important;
   font-size:   14px                          !important;
   font-weight: 500                           !important;
   color:       rgba(255,255,255,0.36)        !important;
 }
-
 html.android #np-no-lyrics,
 html.android .np-no-lyrics {
   font-size:  13px                   !important;
