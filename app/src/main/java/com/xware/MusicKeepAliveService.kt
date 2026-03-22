@@ -8,6 +8,7 @@ import android.content.IntentFilter
 import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
+import android.os.PowerManager
 import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
 
@@ -18,6 +19,9 @@ class MusicKeepAliveService : Service() {
         const val NOTIF_ID            = 1001
         const val ACTION_UPDATE_TITLE = "com.xware.ACTION_UPDATE_TITLE"
     }
+
+    // ★ WakeLock: CPU가 절전 상태로 전환되는 것을 막아 백그라운드 재생 유지
+    private var wakeLock: PowerManager.WakeLock? = null
 
     private val titleReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
@@ -36,17 +40,23 @@ class MusicKeepAliveService : Service() {
 
         val notification = buildNotification("X-WARE", "음악 재생 중")
 
-        // ★ Android 10+: DATA_SYNC 타입으로 startForeground
-        //   mediaPlayback 타입은 삼성 Android 14에서 MediaSession 없으면 크래시
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             ServiceCompat.startForeground(
-                this,
-                NOTIF_ID,
-                notification,
+                this, NOTIF_ID, notification,
                 ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
             )
         } else {
             startForeground(NOTIF_ID, notification)
+        }
+
+        // ★ WakeLock 획득: PARTIAL_WAKE_LOCK = 화면 꺼져도 CPU 유지
+        val pm = getSystemService(Context.POWER_SERVICE) as PowerManager
+        wakeLock = pm.newWakeLock(
+            PowerManager.PARTIAL_WAKE_LOCK,
+            "XWare:MusicWakeLock"
+        ).apply {
+            setReferenceCounted(false)
+            acquire(10 * 60 * 60 * 1000L) // 최대 10시간
         }
 
         val filter = IntentFilter(ACTION_UPDATE_TITLE)
@@ -63,6 +73,10 @@ class MusicKeepAliveService : Service() {
     }
 
     override fun onDestroy() {
+        // ★ WakeLock 해제
+        try {
+            wakeLock?.let { if (it.isHeld) it.release() }
+        } catch (_: Exception) {}
         try { unregisterReceiver(titleReceiver) } catch (_: Exception) {}
         super.onDestroy()
     }
