@@ -44,10 +44,12 @@ class LyricsOverlayService : Service() {
     private val TAG = "XWareOverlay"
     private var wm: WindowManager? = null
 
-    private var bubbleRoot: FrameLayout? = null
-    private var playIconView: android.widget.ImageView? = null
-    private var panelView: LinearLayout? = null
-    private var panelTitleTv: TextView? = null
+    private var bubbleRoot:      FrameLayout?           = null
+    // ★ 버블 중앙 아이콘 + 패널 안 재생버튼 → 둘 다 저장해서 동시 업데이트
+    private var bubbleIconView:  android.widget.ImageView? = null
+    private var panelPlayIcon:   android.widget.ImageView? = null
+    private var panelTitleTv:    TextView?              = null
+    private var panelView:       LinearLayout?          = null
 
     private var isPlaying  = false
     private var trackTitle = ""
@@ -56,12 +58,14 @@ class LyricsOverlayService : Service() {
     private val BUBBLE_DP  = 52
     private val PANEL_W_DP = 200
 
-    // 드래그
-    private var initX = 0; private var initY = 0
-    private var initTouchX = 0f; private var initTouchY = 0f
+    private var initX = 0;     private var initY = 0
+    private var initTX = 0f;   private var initTY = 0f
     private var dragging = false
     private val DRAG_THRESHOLD = 8
 
+    // ════════════════════════════════════════════
+    //  생명주기
+    // ════════════════════════════════════════════
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onCreate() {
@@ -75,7 +79,8 @@ class LyricsOverlayService : Service() {
         when (intent?.action) {
             ACTION_UPDATE_STATE -> {
                 isPlaying = intent.getBooleanExtra("playing", false)
-                updatePlayIcon()
+                // ★ 버블 아이콘 + 패널 재생버튼 동시 업데이트
+                updateAllPlayIcons()
             }
             ACTION_UPDATE_TRACK -> {
                 trackTitle = intent.getStringExtra("title") ?: ""
@@ -90,41 +95,40 @@ class LyricsOverlayService : Service() {
         super.onDestroy()
     }
 
-    // ══════════════════════════════════════════════
-    //  버블 생성 — 심플 프리미엄 디자인
-    // ══════════════════════════════════════════════
+    // ════════════════════════════════════════════
+    //  버블 생성
+    // ════════════════════════════════════════════
     private fun createBubble() {
-        val bubPx    = dp(BUBBLE_DP)
-        val screenW  = resources.displayMetrics.widthPixels
-        val screenH  = resources.displayMetrics.heightPixels
+        val bubPx   = dp(BUBBLE_DP)
+        val screenH = resources.displayMetrics.heightPixels
 
-        // ── 버블 배경: 반투명 다크 원형 ──
+        // ── 버블 배경 ──
         val bubble = FrameLayout(this)
-        bubbleRoot = FrameLayout(this) // 루트는 bubble + panel 포함
-
         val bgDrawable = GradientDrawable().apply {
-            shape        = GradientDrawable.OVAL
+            shape = GradientDrawable.OVAL
             setColor(Color.argb(220, 10, 10, 20))
             setStroke(dp(1), Color.argb(80, 250, 45, 90))
         }
         bubble.background = bgDrawable
         bubble.elevation  = dp(6).toFloat()
 
-        // ── 재생 아이콘 (SVG → Canvas 드로잉) ──
+        // ── 버블 중앙 아이콘 ──
         val iconView = android.widget.ImageView(this).apply {
             scaleType = android.widget.ImageView.ScaleType.CENTER_INSIDE
             setPadding(dp(14), dp(14), dp(14), dp(14))
         }
-        playIconView = iconView
-        setPlayIcon(iconView, isPlaying)
+        bubbleIconView = iconView
+        renderPlayIcon(iconView, isPlaying)
         bubble.addView(iconView, FrameLayout.LayoutParams(-1, -1))
 
         // ── 컨트롤 패널 ──
         val panel = buildPanel()
-        panelView  = panel
+        panelView = panel
         panel.visibility = View.GONE
 
-        val root = bubbleRoot!!
+        // ── 루트 ──
+        val root = FrameLayout(this)
+        bubbleRoot = root
         root.addView(bubble, FrameLayout.LayoutParams(bubPx, bubPx))
         root.addView(panel, FrameLayout.LayoutParams(dp(PANEL_W_DP), -2).apply {
             marginStart = bubPx + dp(6)
@@ -144,37 +148,35 @@ class LyricsOverlayService : Service() {
             PixelFormat.TRANSLUCENT
         ).apply {
             gravity = Gravity.TOP or Gravity.START
-            x = dp(16)           // ★ 왼쪽 고정
+            x = dp(16)   // 왼쪽
             y = screenH / 3
         }
 
-        // ── 터치: 드래그 + 탭 ──
+        // ── 터치 이벤트 ──
         bubble.setOnTouchListener(object : View.OnTouchListener {
             override fun onTouch(v: View, e: MotionEvent): Boolean {
                 val lp = (root.layoutParams as? WindowManager.LayoutParams) ?: params
                 when (e.action) {
                     MotionEvent.ACTION_DOWN -> {
                         initX = lp.x; initY = lp.y
-                        initTouchX = e.rawX; initTouchY = e.rawY
+                        initTX = e.rawX; initTY = e.rawY
                         dragging = false
                     }
                     MotionEvent.ACTION_MOVE -> {
-                        val dx = (e.rawX - initTouchX).toInt()
-                        val dy = (e.rawY - initTouchY).toInt()
+                        val dx = (e.rawX - initTX).toInt()
+                        val dy = (e.rawY - initTY).toInt()
                         if (!dragging &&
                             (Math.abs(dx) > DRAG_THRESHOLD || Math.abs(dy) > DRAG_THRESHOLD)) {
                             dragging = true
                             if (isExpanded) collapsePanel()
                         }
                         if (dragging) {
-                            lp.x = initX + dx
-                            lp.y = initY + dy
+                            lp.x = initX + dx; lp.y = initY + dy
                             try { wm?.updateViewLayout(root, lp) } catch (_: Exception) {}
                         }
                     }
                     MotionEvent.ACTION_UP -> {
-                        if (!dragging) togglePanel()
-                        else snapToEdge(lp)
+                        if (!dragging) togglePanel() else snapToEdge(lp)
                     }
                 }
                 return true
@@ -184,58 +186,21 @@ class LyricsOverlayService : Service() {
         wm?.addView(root, params)
     }
 
-    // ── SVG 아이콘 그리기 (Canvas 기반) ──────────
-    private fun setPlayIcon(iv: android.widget.ImageView, playing: Boolean) {
-        val size = dp(24)
-        val bmp  = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
-        val c    = Canvas(bmp)
-        val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = Color.WHITE
-            style = Paint.Style.FILL
-        }
-
-        if (playing) {
-            // ■■ 일시정지 아이콘 (두 개의 직사각형)
-            val barW = size * 0.22f
-            val barH = size * 0.62f
-            val top  = (size - barH) / 2f
-            val gap  = size * 0.16f
-            val left1 = (size - barW * 2 - gap) / 2f
-            val left2 = left1 + barW + gap
-            c.drawRoundRect(left1, top, left1 + barW, top + barH, dp(1).toFloat(), dp(1).toFloat(), paint)
-            c.drawRoundRect(left2, top, left2 + barW, top + barH, dp(1).toFloat(), dp(1).toFloat(), paint)
-        } else {
-            // ▶ 재생 아이콘 (삼각형)
-            val path = Path()
-            val cx   = size * 0.52f
-            val h    = size * 0.62f
-            val top  = (size - h) / 2f
-            path.moveTo(cx - size * 0.22f, top)
-            path.lineTo(cx + size * 0.32f, size / 2f)
-            path.lineTo(cx - size * 0.22f, top + h)
-            path.close()
-            c.drawPath(path, paint)
-        }
-
-        iv.setImageBitmap(bmp)
-    }
-
-    // ── 컨트롤 패널 빌드 ──────────────────────────
+    // ════════════════════════════════════════════
+    //  컨트롤 패널
+    // ════════════════════════════════════════════
     private fun buildPanel(): LinearLayout {
         val panel = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(14), dp(10), dp(14), dp(10))
             elevation   = dp(10).toFloat()
         }
-
-        // 배경: 모서리 둥근 반투명 다크
-        val bg = GradientDrawable().apply {
+        panel.background = GradientDrawable().apply {
             shape        = GradientDrawable.RECTANGLE
             cornerRadius = dp(16).toFloat()
             setColor(Color.argb(230, 8, 8, 18))
             setStroke(dp(1), Color.argb(50, 255, 255, 255))
         }
-        panel.background = bg
 
         // 트랙 타이틀
         val titleTv = TextView(this).apply {
@@ -258,18 +223,34 @@ class LyricsOverlayService : Service() {
             gravity     = Gravity.CENTER
             weightSum   = 3f
         }
-        row.addView(makeSvgBtn(SvgIcon.PREV)  { sendCmd("prevT()") })
-        row.addView(makeSvgBtn(SvgIcon.PLAY)  { sendCmd("togglePlay()") })
-        row.addView(makeSvgBtn(SvgIcon.NEXT)  { sendCmd("nextT()") })
+
+        // 이전
+        row.addView(makeSvgBtn(BtnType.PREV, null) { sendCmd("prevT()") })
+
+        // ★ 재생/정지 버튼 — ImageView 참조 저장
+        val playBtnContainer = FrameLayout(this).apply {
+            layoutParams = LinearLayout.LayoutParams(0, dp(40), 1f)
+        }
+        val playIv = android.widget.ImageView(this).apply {
+            scaleType = android.widget.ImageView.ScaleType.CENTER_INSIDE
+            setPadding(dp(8), dp(8), dp(8), dp(8))
+            layoutParams = FrameLayout.LayoutParams(-1, -1)
+        }
+        panelPlayIcon = playIv          // ★ 참조 저장
+        renderPlayIcon(playIv, isPlaying)
+        playBtnContainer.addView(playIv)
+        playBtnContainer.setOnClickListener { sendCmd("togglePlay()") }
+        row.addView(playBtnContainer)
+
+        // 다음
+        row.addView(makeSvgBtn(BtnType.NEXT, null) { sendCmd("nextT()") })
         panel.addView(row, LinearLayout.LayoutParams(-1, -2))
 
         // 구분선
-        val divider = View(this).apply {
+        panel.addView(View(this).apply {
             setBackgroundColor(Color.argb(40, 255, 255, 255))
-        }
-        panel.addView(divider, LinearLayout.LayoutParams(-1, dp(1)).apply {
-            topMargin    = dp(8)
-            bottomMargin = dp(6)
+        }, LinearLayout.LayoutParams(-1, dp(1)).apply {
+            topMargin = dp(8); bottomMargin = dp(6)
         })
 
         // 종료 버튼
@@ -288,86 +269,126 @@ class LyricsOverlayService : Service() {
         return panel
     }
 
-    // ── SVG 아이콘 버튼 ──────────────────────────
-    enum class SvgIcon { PREV, PLAY, NEXT }
+    // ════════════════════════════════════════════
+    //  아이콘 렌더링 (Canvas)
+    // ════════════════════════════════════════════
+    enum class BtnType { PREV, PLAY, PAUSE, NEXT }
 
-    private fun makeSvgBtn(icon: SvgIcon, onClick: () -> Unit): FrameLayout {
-        val size = dp(40)
-        val fl   = FrameLayout(this).apply {
+    /** 재생 상태에 따라 ▶ 또는 ■■ 을 그려서 ImageView 에 적용 */
+    private fun renderPlayIcon(iv: android.widget.ImageView, playing: Boolean) {
+        val size = dp(24)
+        val bmp  = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
+        val c    = Canvas(bmp)
+        val p    = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.WHITE; style = Paint.Style.FILL
+        }
+
+        if (playing) {
+            // ■■ 일시정지
+            val bw  = size * 0.22f
+            val bh  = size * 0.60f
+            val top = (size - bh) / 2f
+            val gap = size * 0.14f
+            val l1  = (size - bw * 2 - gap) / 2f
+            val r1  = l1 + dp(1).toFloat()
+            c.drawRoundRect(l1, top, l1 + bw, top + bh, r1, r1, p)
+            c.drawRoundRect(l1 + bw + gap, top, l1 + bw * 2 + gap, top + bh, r1, r1, p)
+        } else {
+            // ▶ 재생
+            val path = Path()
+            val h    = size * 0.60f
+            val top  = (size - h) / 2f
+            val lx   = size * 0.30f
+            path.moveTo(lx, top)
+            path.lineTo(lx + size * 0.44f, size / 2f)
+            path.lineTo(lx, top + h)
+            path.close()
+            c.drawPath(path, p)
+        }
+        iv.setImageBitmap(bmp)
+    }
+
+    /** PREV / NEXT 버튼 */
+    private fun makeSvgBtn(type: BtnType, iv: android.widget.ImageView?, onClick: () -> Unit): FrameLayout {
+        val size  = dp(40)
+        val fl    = FrameLayout(this).apply {
             layoutParams = LinearLayout.LayoutParams(0, size, 1f)
         }
-        val iv   = android.widget.ImageView(this).apply {
+        val imgV  = iv ?: android.widget.ImageView(this).apply {
             scaleType = android.widget.ImageView.ScaleType.CENTER_INSIDE
             setPadding(dp(8), dp(8), dp(8), dp(8))
         }
 
-        // Canvas로 각 아이콘 그리기
         val bmpSize = dp(24)
         val bmp     = Bitmap.createBitmap(bmpSize, bmpSize, Bitmap.Config.ARGB_8888)
         val c       = Canvas(bmp)
-        val paint   = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = Color.argb(220, 255, 255, 255)
-            style = Paint.Style.FILL
+        val fill    = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.argb(220, 255, 255, 255); style = Paint.Style.FILL
         }
-        val strokePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color     = Color.argb(220, 255, 255, 255)
-            style     = Paint.Style.STROKE
+        val stroke  = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.argb(220, 255, 255, 255)
+            style = Paint.Style.STROKE
             strokeCap = Paint.Cap.ROUND
             strokeWidth = dp(2).toFloat()
         }
 
-        when (icon) {
-            SvgIcon.PREV -> {
-                // ◀ + | 이전 트랙
+        when (type) {
+            BtnType.PREV -> {
+                // ◀ 삼각형 + 왼쪽 세로선
                 val path = Path()
-                val cx   = bmpSize * 0.58f
-                val h    = bmpSize * 0.55f
+                val h    = bmpSize * 0.54f
                 val top  = (bmpSize - h) / 2f
-                path.moveTo(cx + bmpSize * 0.22f, top)
-                path.lineTo(cx - bmpSize * 0.22f, bmpSize / 2f)
-                path.lineTo(cx + bmpSize * 0.22f, top + h)
-                path.close()
-                c.drawPath(path, paint)
-                // 왼쪽 수직선
-                val barX = bmpSize * 0.22f
-                c.drawLine(barX, top, barX, top + h, strokePaint)
+                val rx   = bmpSize * 0.62f
+                path.moveTo(rx, top); path.lineTo(rx - bmpSize * 0.34f, bmpSize / 2f)
+                path.lineTo(rx, top + h); path.close()
+                c.drawPath(path, fill)
+                val bx = bmpSize * 0.22f
+                c.drawLine(bx, top, bx, top + h, stroke)
             }
-            SvgIcon.PLAY -> {
-                // ▶ 재생 (기본값)
+            BtnType.NEXT -> {
+                // ▶ 삼각형 + 오른쪽 세로선
                 val path = Path()
-                val cx   = bmpSize * 0.52f
-                val h    = bmpSize * 0.60f
+                val h    = bmpSize * 0.54f
                 val top  = (bmpSize - h) / 2f
-                path.moveTo(cx - bmpSize * 0.20f, top)
-                path.lineTo(cx + bmpSize * 0.30f, bmpSize / 2f)
-                path.lineTo(cx - bmpSize * 0.20f, top + h)
-                path.close()
-                c.drawPath(path, paint)
+                val lx   = bmpSize * 0.24f
+                path.moveTo(lx, top); path.lineTo(lx + bmpSize * 0.34f, bmpSize / 2f)
+                path.lineTo(lx, top + h); path.close()
+                c.drawPath(path, fill)
+                val bx = bmpSize * 0.78f
+                c.drawLine(bx, top, bx, top + h, stroke)
             }
-            SvgIcon.NEXT -> {
-                // ▶ + | 다음 트랙
-                val path = Path()
-                val cx   = bmpSize * 0.42f
-                val h    = bmpSize * 0.55f
-                val top  = (bmpSize - h) / 2f
-                path.moveTo(cx - bmpSize * 0.22f, top)
-                path.lineTo(cx + bmpSize * 0.22f, bmpSize / 2f)
-                path.lineTo(cx - bmpSize * 0.22f, top + h)
-                path.close()
-                c.drawPath(path, paint)
-                // 오른쪽 수직선
-                val barX = bmpSize * 0.78f
-                c.drawLine(barX, top, barX, top + h, strokePaint)
-            }
+            else -> {}
         }
 
-        iv.setImageBitmap(bmp)
-        fl.addView(iv, FrameLayout.LayoutParams(-1, -1))
+        imgV.setImageBitmap(bmp)
+        fl.addView(imgV, FrameLayout.LayoutParams(-1, -1))
         fl.setOnClickListener { onClick() }
         return fl
     }
 
-    // ── 패널 토글 ─────────────────────────────────
+    // ════════════════════════════════════════════
+    //  상태 업데이트
+    // ════════════════════════════════════════════
+
+    /** ★ 버블 아이콘 + 패널 재생버튼 동시 업데이트 */
+    private fun updateAllPlayIcons() {
+        bubbleIconView?.post {
+            bubbleIconView?.let { renderPlayIcon(it, isPlaying) }
+        }
+        panelPlayIcon?.post {
+            panelPlayIcon?.let { renderPlayIcon(it, isPlaying) }
+        }
+    }
+
+    private fun updatePanelTitle() {
+        panelTitleTv?.post {
+            panelTitleTv?.text = if (trackTitle.isNotBlank()) trackTitle else "X-WARE"
+        }
+    }
+
+    // ════════════════════════════════════════════
+    //  패널 토글
+    // ════════════════════════════════════════════
     private fun togglePanel() {
         if (isExpanded) collapsePanel() else expandPanel()
     }
@@ -375,12 +396,11 @@ class LyricsOverlayService : Service() {
     private fun expandPanel() {
         isExpanded = true
         panelView?.apply {
-            visibility = View.VISIBLE
-            alpha = 0f; translationX = -dp(10).toFloat()
+            visibility   = View.VISIBLE
+            alpha        = 0f
+            translationX = -dp(10).toFloat()
             animate().alpha(1f).translationX(0f)
-                .setDuration(200)
-                .setInterpolator(DecelerateInterpolator())
-                .start()
+                .setDuration(200).setInterpolator(DecelerateInterpolator()).start()
         }
     }
 
@@ -393,7 +413,9 @@ class LyricsOverlayService : Service() {
             ?.start()
     }
 
-    // ── 화면 끝으로 스냅 ──────────────────────────
+    // ════════════════════════════════════════════
+    //  스냅 / 기타
+    // ════════════════════════════════════════════
     private fun snapToEdge(lp: WindowManager.LayoutParams) {
         val root    = bubbleRoot ?: return
         val screenW = resources.displayMetrics.widthPixels
@@ -410,34 +432,17 @@ class LyricsOverlayService : Service() {
         anim.start()
     }
 
-    // ── 상태 업데이트 ─────────────────────────────
-    private fun updatePlayIcon() {
-        playIconView?.post {
-            playIconView?.let { setPlayIcon(it, isPlaying) }
-        }
-    }
-
-    private fun updatePanelTitle() {
-        panelTitleTv?.post {
-            panelTitleTv?.text = if (trackTitle.isNotBlank()) trackTitle else "X-WARE"
-        }
-    }
-
-    // ── JS 명령 전송 ──────────────────────────────
     private fun sendCmd(js: String) {
         sendBroadcast(Intent("com.xware.OVERLAY_CONTROL").apply {
-            putExtra("js", js)
-            setPackage(packageName)
+            putExtra("js", js); setPackage(packageName)
         })
     }
 
-    // ── 버블 제거 ─────────────────────────────────
     private fun removeBubble() {
         try { bubbleRoot?.let { wm?.removeView(it) } } catch (_: Exception) {}
         bubbleRoot = null
     }
 
-    // ── 알림 채널 ─────────────────────────────────
     private fun createNotifChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             (getSystemService(NOTIFICATION_SERVICE) as NotificationManager)
